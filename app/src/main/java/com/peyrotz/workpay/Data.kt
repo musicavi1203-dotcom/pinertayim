@@ -197,13 +197,19 @@ abstract class AppDb : RoomDatabase() {
 // Helper: DayRow + loadMonth
 // ============================================================
 
+/**
+ * Represents one row in the main table.
+ * Includes rate + segments (with mires) so the PDF can show a per-segment breakdown.
+ */
 data class DayRow(
     val id: Long,
     val date: LocalDate,
     val startMin: Int,
     val endMin: Int,
     val minutes: Int,
-    val pay: Double
+    val pay: Double,
+    val rate: Double,
+    val segments: List<SegmentEntity> = emptyList()
 )
 
 fun loadMonth(ctx: Context, jobId: Long, m: YearMonth): List<DayRow> {
@@ -223,7 +229,9 @@ fun loadMonth(ctx: Context, jobId: Long, m: YearMonth): List<DayRow> {
             startMin = s.firstOrNull()?.startMin ?: 0,
             endMin = s.lastOrNull()?.endMin ?: 0,
             minutes = s.sumOf { Calc.minutes(it) },
-            pay = s.sumOf { Calc.pay(it, d.rate) }
+            pay = s.sumOf { Calc.pay(it, d.rate) },
+            rate = d.rate,
+            segments = s
         )
     }
 }
