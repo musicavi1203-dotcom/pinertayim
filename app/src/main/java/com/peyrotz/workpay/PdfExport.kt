@@ -16,6 +16,7 @@ import java.util.Locale
 /**
  * ייצוא דוח חודשי ל-PDF — ללא ספריות חיצוניות.
  * משתמש ב-PdfDocument המובנה של אנדרואיד.
+ * כולל פירוט פרקים עם מיירס לכל פרק.
  */
 object PdfExport {
 
@@ -23,7 +24,14 @@ object PdfExport {
     private const val H = 842
     private const val M = 40f
 
-    private class Item(val cells: Array<String>, val bold: Boolean)
+    /**
+     * שורה בטבלה. if bold=true — שורה ראשית של יום.
+     */
+    private class Row(
+        val cells: Array<String>,
+        val isMain: Boolean,
+        val isTotal: Boolean = false
+    )
 
     fun create(
         ctx: Context,
@@ -43,12 +51,17 @@ object PdfExport {
         val bold = Paint(normal).apply {
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         }
+        val subPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            textSize = 10f
+            color = Color.parseColor("#7A7A7A")
+            textAlign = Paint.Align.CENTER
+        }
         val titlePaint = Paint(bold).apply {
             textSize = 22f
             textAlign = Paint.Align.RIGHT
             color = Color.parseColor("#2644FF")
         }
-        val subPaint = Paint(normal).apply {
+        val subTitlePaint = Paint(normal).apply {
             textSize = 15f
             color = Color.DKGRAY
             textAlign = Paint.Align.RIGHT
@@ -62,7 +75,7 @@ object PdfExport {
             style = Paint.Style.FILL
         }
         val headerTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            textSize = 12f
+            textSize = 11f
             color = Color.WHITE
             textAlign = Paint.Align.CENTER
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
@@ -77,13 +90,13 @@ object PdfExport {
             textAlign = Paint.Align.CENTER
         }
 
-        // ---------- עמודות (RTL): תאריך, כניסה, יציאה, שעות, שכר ----------
-        val weights = floatArrayOf(1.1f, 1f, 1f, 1f, 1.2f)
+        // ---------- 6 עמודות (RTL): תאריך, כניסה, יציאה, שעות, מיירס, שכר ----------
+        val weights = floatArrayOf(1.1f, 1.0f, 1.0f, 1.0f, 0.8f, 1.2f)
         val contentW = W - 2 * M
         val right = W - M
-        val centers = FloatArray(5)
+        val centers = FloatArray(6)
         var x = right
-        for (i in 0..4) {
+        for (i in 0..5) {
             val w = contentW * weights[i] / weights.sum()
             centers[i] = x - w / 2
             x -= w
@@ -93,40 +106,84 @@ object PdfExport {
             ctx.getString(R.string.col_start),
             ctx.getString(R.string.col_end),
             ctx.getString(R.string.col_hours),
+            "מיירס",
             ctx.getString(R.string.pdf_pay_header)
         )
 
-        // ---------- שורות ----------
-        val items = ArrayList<Item>()
+        // ---------- בניית שורות ----------
+        val items = ArrayList<Row>()
+
         rows.forEach { r ->
-            items.add(
-                Item(
-                    arrayOf(
-                        "${r.date.dayOfMonth}/${r.date.monthValue}",
-                        Calc.fmtTime(r.startMin),
-                        Calc.fmtTime(r.endMin),
-                        Calc.fmtHours(r.minutes),
-                        Calc.fmtPay(r.pay)
-                    ),
-                    false
+            val segs = r.segments
+            if (segs.size <= 1) {
+                // יום עם פרק אחד (או אפס) — שורה אחת עם מיירס
+                val mires = segs.firstOrNull()?.mirros?.toString() ?: ""
+                items.add(
+                    Row(
+                        arrayOf(
+                            "${r.date.dayOfMonth}/${r.date.monthValue}",
+                            Calc.fmtTime(r.startMin),
+                            Calc.fmtTime(r.endMin),
+                            Calc.fmtHours(r.minutes),
+                            mires,
+                            Calc.fmtPay(r.pay)
+                        ),
+                        isMain = true
+                    )
                 )
-            )
+            } else {
+                // יום עם 2+ פרקים — שורה ראשית (בלי מיירס) + תת-שורות
+                items.add(
+                    Row(
+                        arrayOf(
+                            "${r.date.dayOfMonth}/${r.date.monthValue}",
+                            Calc.fmtTime(r.startMin),
+                            Calc.fmtTime(r.endMin),
+                            Calc.fmtHours(r.minutes),
+                            "",
+                            Calc.fmtPay(r.pay)
+                        ),
+                        isMain = true
+                    )
+                )
+                segs.sortedBy { it.startMin }.forEach { s ->
+                    items.add(
+                        Row(
+                            arrayOf(
+                                "",
+                                Calc.fmtTime(s.startMin),
+                                Calc.fmtTime(s.endMin),
+                                Calc.fmtHours(Calc.minutes(s)),
+                                s.mirros.toString(),
+                                Calc.fmtPay(Calc.pay(s, r.rate))
+                            ),
+                            isMain = false
+                        )
+                    )
+                }
+            }
         }
+
+        // שורת סה"כ
         items.add(
-            Item(
+            Row(
                 arrayOf(
                     ctx.getString(R.string.pdf_total),
                     "",
                     "",
                     Calc.fmtHours(rows.sumOf { it.minutes }),
+                    "",
                     Calc.fmtPay(rows.sumOf { it.pay })
                 ),
-                true
+                isMain = true,
+                isTotal = true
             )
         )
 
         // ---------- יצירת PDF ----------
-        val rowH = 26f
+        val rowH = 22f
+        val subRowH = 18f
+        val headerH = 26f
         val doc = PdfDocument()
         var idx = 0
         var pageNo = 1
@@ -140,27 +197,48 @@ object PdfExport {
 
             if (pageNo == 1) {
                 c.drawText(jobName, right, M + 22, titlePaint)
-                c.drawText(monthTitle, right, M + 46, subPaint)
+                c.drawText(monthTitle, right, M + 46, subTitlePaint)
                 y = M + 70
             } else {
                 y = M
             }
 
-            // Header row
-            c.drawRect(M, y, right, y + 26f, headerBgPaint)
-            for (i in 0..4) {
+            // Header
+            c.drawRect(M, y, right, y + headerH, headerBgPaint)
+            for (i in 0..5) {
                 c.drawText(labels[i], centers[i], y + 18f, headerTextPaint)
             }
-            y += 26f
+            y += headerH
 
             // Rows
-            while (idx < items.size && y + rowH <= H - M) {
-                val item = items[idx]
-                val p = if (item.bold) bold else normal
-                for (i in 0..4) {
-                    c.drawText(item.cells[i], centers[i], y + 18f, p)
+            while (idx < items.size) {
+                val row = items[idx]
+                val h = if (row.isMain) rowH else subRowH
+
+                // page break?
+                if (y + h > H - M) break
+
+                val paint = when {
+                    row.isTotal -> bold
+                    row.isMain -> normal
+                    else -> subPaint
                 }
-                y += rowH
+
+                // רקע תכלת לשורת סה"כ
+                if (row.isTotal) {
+                    c.drawRect(M, y, right, y + h, totalBgPaint)
+                }
+
+                val textY = y + h / 2f + 4f
+                for (i in 0..5) {
+                    if (i == 5 && row.isTotal) {
+                        c.drawText(row.cells[i], centers[i], textY, totalTextPaint)
+                    } else {
+                        c.drawText(row.cells[i], centers[i], textY, paint)
+                    }
+                }
+
+                y += h
                 c.drawLine(M, y, right, y, linePaint)
                 idx++
             }
