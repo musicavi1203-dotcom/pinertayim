@@ -4,10 +4,12 @@ import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.content.Context
 import android.widget.Toast
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -17,6 +19,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
@@ -56,10 +59,6 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.UUID
 
-/**
- * Represents a segment during editing.
- * Uses a stable [uid] so deletion never removes the wrong item by index.
- */
 private data class SegUi(
     val uid: String = UUID.randomUUID().toString(),
     val start: Int,
@@ -77,10 +76,6 @@ private fun pickTime(ctx: Context, cur: Int, onPick: (Int) -> Unit) {
     ).show()
 }
 
-/**
- * Removes a segment by its stable uid (never by index).
- * This prevents deleting the wrong item when multiple deletions happen.
- */
 private fun SnapshotStateList<SegUi>.removeByUid(uid: String) {
     val idx = indexOfFirst { it.uid == uid }
     if (idx >= 0) removeAt(idx)
@@ -127,7 +122,13 @@ fun DayScreen(
                 rateText = Calc.fmtRateInput(d.rate)
                 segs.clear()
                 loaded.second.forEach {
-                    segs.add(SegUi(start = it.startMin, end = it.endMin, mirros = it.mirros.toString()))
+                    segs.add(
+                        SegUi(
+                            start = it.startMin,
+                            end = it.endMin,
+                            mirros = it.mirros.toString()
+                        )
+                    )
                 }
             }
         }
@@ -171,10 +172,12 @@ fun DayScreen(
         }
     }
 
-    val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val statusBarPadding = WindowInsets.statusBars
+        .asPaddingValues()
+        .calculateTopPadding()
 
     Column(Modifier.fillMaxSize()) {
-        // ======= סרגל עליון (עם insets) =======
+        // ======= סרגל עליון =======
         Row(
             Modifier
                 .fillMaxWidth()
@@ -195,7 +198,10 @@ fun DayScreen(
                 )
             }
             Text(
-                stringResource(if (dayId == 0L) R.string.day_title_new else R.string.day_title_edit),
+                stringResource(
+                    if (dayId == 0L) R.string.day_title_new
+                    else R.string.day_title_edit
+                ),
                 color = Color.White,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
@@ -210,7 +216,11 @@ fun DayScreen(
                 .padding(16.dp)
         ) {
             // ======= תאריך =======
-            Text(stringResource(R.string.date_label), fontSize = 14.sp, color = Color.Gray)
+            Text(
+                stringResource(R.string.date_label),
+                fontSize = 14.sp,
+                color = Color.Gray
+            )
             OutlinedButton(
                 onClick = {
                     DatePickerDialog(
@@ -270,7 +280,10 @@ fun DayScreen(
                                 },
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Text(stringResource(R.string.start) + " " + Calc.fmtTime(s.start))
+                                Text(
+                                    stringResource(R.string.start) + " " +
+                                        Calc.fmtTime(s.start)
+                                )
                             }
                             Spacer(Modifier.width(8.dp))
                             OutlinedButton(
@@ -282,7 +295,10 @@ fun DayScreen(
                                 },
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Text(stringResource(R.string.end) + " " + Calc.fmtTime(s.end))
+                                Text(
+                                    stringResource(R.string.end) + " " +
+                                        Calc.fmtTime(s.end)
+                                )
                             }
                             IconButton(onClick = { segs.removeByUid(s.uid) }) {
                                 Icon(
@@ -304,12 +320,15 @@ fun DayScreen(
                                 },
                                 label = { Text(stringResource(R.string.mirros_per_hour)) },
                                 singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Number
+                                ),
                                 modifier = Modifier.weight(1f)
                             )
                             Spacer(Modifier.width(12.dp))
                             Text(
-                                stringResource(R.string.segment_pay) + ": ₪" + Calc.fmtPay(segPay),
+                                stringResource(R.string.segment_pay) + ": ₪" +
+                                    Calc.fmtPay(segPay),
                                 fontWeight = FontWeight.Bold,
                                 color = primary
                             )
