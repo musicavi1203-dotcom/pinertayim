@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">פינעערטיים</string>
+
+    <!-- מסך ראשי -->
+    <string name="add_day">הוסף יום</string>
+    <string name="settings">הגדרות</string>
+    <string name="payments">תשלומים</string>
+    <string name="jump_today">חודש נוכחי</string>
+    <string name="export_pdf">ייצוא PDF</string>
+    <string name="more">עוד</string>
+    <string name="back">חזרה</string>
+    <string name="no_days">אין ימים בחודש הזה</string>
+
+    <!-- כותרות טבלה -->
+    <string name="col_date">תאריך</string>
+    <string name="col_start">כניסה</string>
+    <string name="col_end">יציאה</string>
+    <string name="col_hours">שעות</string>
+    <string name="col_pay">שכר</string>
+
+    <!-- סיכום -->
+    <string name="days_count">ימים</string>
+    <string name="hours_label">שעות</string>
+    <string name="pay_label">שכר</string>
+    <string name="balance_label">יתרה</string>
+
+    <!-- יום עבודה -->
+    <string name="day_title_new">יום חדש</string>
+    <string name="day_title_edit">עריכת יום</string>
+    <string name="date_label">תאריך</string>
+    <string name="rate_label">תעריף לשעה (₪)</string>
+    <string name="segments_label">פרקי זמן</string>
+    <string name="start">התחלה</string>
+    <string name="end">סיום</string>
+    <string name="mirros_per_hour">מיירעס לשעה</string>
+    <string name="segment_pay">שכר הפרק</string>
+    <string name="add_segment">הוסף פרק</string>
+    <string name="day_total">סה״כ ליום</string>
+    <string name="save">שמור</string>
+    <string name="delete">מחק</string>
+    <string name="cancel">ביטול</string>
+    <string name="add">הוסף</string>
+    <string name="confirm_delete">למחוק את היום?</string>
+
+    <!-- שגיאות -->
+    <string name="err_rate">תעריף לא תקין</string>
+    <string name="err_segments">יש להוסיף לפחות פרק אחד</string>
+    <string name="err_time">שעת התחלה וסיום לא יכולות להיות זהות</string>
+    <string name="err_mirros">מיירעס חייב להיות 1 ומעלה</string>
+    <string name="err_job_name">יש להזין שם</string>
+    <string name="err_no_days_export">אין ימים לייצוא בחודש הזה</string>
+    <string name="err_export">הייצוא נכשל</string>
+
+    <!-- הגדרות -->
+    <string name="settings_title">הגדרות</string>
+    <string name="jobs_label">מקומות עבודה</string>
+    <string name="add_job">הוסף מקום עבודה</string>
+    <string name="new_job_title">מקום עבודה חדש</string>
+    <string name="edit_job">עריכת מקום עבודה</string>
+    <string name="job_name">שם</string>
+    <string name="job_rate">תעריף ברירת מחדל לשעה (₪)</string>
+    <string name="per_hour">לשעה</string>
+    <string name="confirm_delete_job">למחוק את מקום העבודה וכל הימים שלו?</string>
+    <string name="theme_color">צבע האפליקציה</string>
+
+    <!-- תשלומים ומקדמות -->
+    <string name="payments_title">תשלומים ומקדמות</string>
+    <string name="add_payment">הוסף תשלום</string>
+    <string name="payment_amount">סכום (₪)</string>
+    <string name="payment_date">תאריך</string>
+    <string name="payment_note">הערה (אופציונלי)</string>
+    <string name="no_payments">אין תשלומים עדיין</string>
+    <string name="earned_total">סה״כ הרווחת</string>
+    <string name="received_total">סה״כ קיבלת</string>
+    <string name="balance_total">יתרה לתשלום</string>
+    <string name="balance_paid">שולם במלואו ✓</string>
+    <string name="confirm_delete_payment">למחוק את התשלום?</string>
+
+    <!-- תזכורת -->
+    <string name="reminder_label">תזכורת יומית</string>
+    <string name="reminder_desc">תזכורת למלא את היום</string>
+    <string name="reminder_time">שעת התזכורת</string>
+    <string name="reminder_title">תזכורת</string>
+    <string name="reminder_text">לא לשכוח למלא את היום! 📝</string>
+    <string name="reminder_on">תזכורת פעילה</string>
+    <string name="reminder_off">תזכורת כבויה</string>
+
+    <!-- PDF -->
+    <string name="pdf_total">סה״כ</string>
+    <string name="pdf_pay_header">שכר (₪)</string>
+    <string name="share_title">שיתוף דוח</string>
+</resources>
