@@ -21,15 +21,18 @@ import java.time.LocalDateTime
 import java.time.LocalTime
 import java.util.concurrent.TimeUnit
 
+// ============================================================
+// קבועים ברמת הקובץ — נגישים גם ל-Reminder וגם ל-ReminderWorker
+// ============================================================
+private const val CHANNEL_ID = "daily_reminder"
+private const val NOTIF_ID = 1001
+private const val WORK_NAME = "daily_reminder_work"
+
 /**
  * תזכורת יומית — שולח התראה בערב להזכיר למלא את היום.
  * משתמש ב-WorkManager כדי לשרוד הפעלה מחדש של הטלפון.
  */
 object Reminder {
-
-    private const val CHANNEL_ID = "daily_reminder"
-    private const val NOTIF_ID = 1001
-    private const val WORK_NAME = "daily_reminder_work"
 
     /**
      * מתזמן תזכורת יומית לפי השעה שנשמרה ב-Prefs.
