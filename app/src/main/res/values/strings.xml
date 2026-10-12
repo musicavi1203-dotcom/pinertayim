@@ -7,6 +7,8 @@
     <string name="add_day">הוסף יום</string>
     <string name="settings">הגדרות</string>
     <string name="payments">תשלומים</string>
+    <string name="yearly_summary">סיכום שנתי</string>
+    <string name="graph">גרף חודשי</string>
     <string name="jump_today">חודש נוכחי</string>
     <string name="export_pdf">ייצוא PDF</string>
     <string name="more">עוד</string>
@@ -64,6 +66,20 @@
     <string name="per_hour">לשעה</string>
     <string name="confirm_delete_job">למחוק את מקום העבודה וכל הימים שלו?</string>
     <string name="theme_color">צבע האפליקציה</string>
+
+    <!-- סיכום שנתי -->
+    <string name="yearly_title">סיכום שנתי</string>
+    <string name="yearly_total_pay">סה״כ שנתי</string>
+    <string name="yearly_total_hours">סה״כ שעות</string>
+    <string name="yearly_active_months">חודשים פעילים</string>
+    <string name="yearly_no_data">אין נתונים לשנה זו</string>
+    <string name="yearly_days">ימים</string>
+
+    <!-- גרף חודשי -->
+    <string name="graph_title">גרף חודשי</string>
+    <string name="graph_daily_pay">שכר יומי</string>
+    <string name="graph_no_data">אין נתונים להצגה</string>
+    <string name="graph_day">יום</string>
 
     <!-- תשלומים ומקדמות -->
     <string name="payments_title">תשלומים ומקדמות</string>
