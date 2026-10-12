@@ -16,9 +16,33 @@ android {
         versionName = "1.0"
     }
 
+    // ===== חתימה קבועה — לקרוא מהסביבה (CI) =====
+    signingConfigs {
+        create("release") {
+            val ksPath = System.getenv("KEYSTORE_PATH")
+            if (ksPath != null) {
+                storeFile = file(ksPath)
+                storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "pinertayim2026"
+                keyAlias = System.getenv("KEY_ALIAS") ?: "pinertayim"
+                keyPassword = System.getenv("KEY_PASSWORD") ?: "pinertayim2026"
+            }
+        }
+    }
+
     buildTypes {
+        debug {
+            // חתימה גם ל-debug עם אותו מפתח — כדי שעדכונים יעבדו
+            val ksPath = System.getenv("KEYSTORE_PATH")
+            if (ksPath != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
         release {
             isMinifyEnabled = false
+            val ksPath = System.getenv("KEYSTORE_PATH")
+            if (ksPath != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 
