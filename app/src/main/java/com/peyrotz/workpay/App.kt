@@ -75,6 +75,8 @@ sealed interface Screen {
     data object Home : Screen
     data object Settings : Screen
     data object Payments : Screen
+    data object Yearly : Screen
+    data object Graph : Screen
     data class Day(val id: Long, val date: String) : Screen
 }
 
@@ -136,7 +138,11 @@ fun App() {
     AppTheme(primary) {
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
             if (!jobsLoaded || jobs.isEmpty()) {
-                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background)
+                )
             } else {
                 val job = jobs.firstOrNull { it.id == jobId } ?: jobs.first()
                 when (val s = screen) {
@@ -157,7 +163,9 @@ fun App() {
                         },
                         onOpen = { screen = Screen.Day(it, LocalDate.now().toString()) },
                         onSettings = { screen = Screen.Settings },
-                        onPayments = { screen = Screen.Payments }
+                        onPayments = { screen = Screen.Payments },
+                        onYearly = { screen = Screen.Yearly },
+                        onGraph = { screen = Screen.Graph }
                     )
 
                     is Screen.Settings -> SettingsScreen(
@@ -169,13 +177,17 @@ fun App() {
                         },
                         onSaveJob = { j ->
                             scope.launch {
-                                withContext(Dispatchers.IO) { AppDb.get(ctx).dao().updateJob(j) }
+                                withContext(Dispatchers.IO) {
+                                    AppDb.get(ctx).dao().updateJob(j)
+                                }
                                 reloadJobs()
                             }
                         },
                         onDeleteJob = { id ->
                             scope.launch {
-                                withContext(Dispatchers.IO) { AppDb.get(ctx).dao().deleteJob(id) }
+                                withContext(Dispatchers.IO) {
+                                    AppDb.get(ctx).dao().deleteJob(id)
+                                }
                                 reloadJobs()
                             }
                         },
@@ -186,6 +198,23 @@ fun App() {
                     is Screen.Payments -> PaymentsScreen(
                         jobId = job.id,
                         jobName = job.name,
+                        onClose = { screen = Screen.Home }
+                    )
+
+                    is Screen.Yearly -> YearlyScreen(
+                        jobId = job.id,
+                        jobName = job.name,
+                        onClose = { screen = Screen.Home },
+                        onOpenMonth = { ym ->
+                            month = ym
+                            screen = Screen.Home
+                        }
+                    )
+
+                    is Screen.Graph -> GraphScreen(
+                        jobId = job.id,
+                        month = month,
+                        onMonth = { month = it },
                         onClose = { screen = Screen.Home }
                     )
 
@@ -234,7 +263,8 @@ fun AppTheme(primary: Color, content: @Composable () -> Unit) {
         if (window != null) {
             window.statusBarColor = primary.toArgb()
             window.navigationBarColor = primary.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
+            WindowCompat.getInsetsController(window, view)
+                .isAppearanceLightStatusBars = false
         }
     }
     MaterialTheme(colorScheme = scheme, content = content)
@@ -322,7 +352,9 @@ fun NameDialog(onDismiss: () -> Unit, onOk: (String) -> Unit) {
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
         }
     )
 }
