@@ -59,6 +59,14 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.UUID
 
+/**
+ * ברירת מחדל לפרק חדש:
+ * כניסה: 14:50, יציאה: 17:05, מיירס: 2
+ */
+private const val DEFAULT_START_MIN = 14 * 60 + 50   // 14:50
+private const val DEFAULT_END_MIN = 17 * 60 + 5      // 17:05
+private const val DEFAULT_MIRROS = "2"               // 🆕 2 מיירס
+
 private data class SegUi(
     val uid: String = UUID.randomUUID().toString(),
     val start: Int,
@@ -107,7 +115,13 @@ fun DayScreen(
     LaunchedEffect(dayId) {
         if (dayId == 0L) {
             if (segs.isEmpty()) {
-                segs.add(SegUi(start = 8 * 60, end = 12 * 60, mirros = "1"))
+                segs.add(
+                    SegUi(
+                        start = DEFAULT_START_MIN,
+                        end = DEFAULT_END_MIN,
+                        mirros = DEFAULT_MIRROS
+                    )
+                )
             }
         } else {
             val loaded = withContext(Dispatchers.IO) {
@@ -341,12 +355,13 @@ fun DayScreen(
             OutlinedButton(
                 onClick = {
                     val last = segs.lastOrNull()
-                    val st = last?.end ?: (8 * 60)
+                    val st = last?.end ?: DEFAULT_START_MIN
+                    val end = if (last == null) DEFAULT_END_MIN else (st + 60) % 1440
                     segs.add(
                         SegUi(
                             start = st,
-                            end = (st + 60) % 1440,
-                            mirros = last?.mirros ?: "1"
+                            end = end,
+                            mirros = last?.mirros ?: DEFAULT_MIRROS
                         )
                     )
                 },
