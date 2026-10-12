@@ -3,6 +3,7 @@ package com.peyrotz.workpay
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,6 +25,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
@@ -53,7 +56,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -80,7 +85,9 @@ fun HomeScreen(
     onAdd: () -> Unit,
     onOpen: (Long) -> Unit,
     onSettings: () -> Unit,
-    onPayments: () -> Unit
+    onPayments: () -> Unit,
+    onYearly: () -> Unit,
+    onGraph: () -> Unit
 ) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -90,6 +97,11 @@ fun HomeScreen(
     var expanded by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     var addJobDialog by remember { mutableStateOf(false) }
+
+    // ===== Swipe between months =====
+    val density = LocalDensity.current
+    val swipeThresholdPx = with(density) { 80.dp.toPx() }
+    var dragTotal by remember { mutableStateOf(0f) }
 
     LaunchedEffect(month, jobId) {
         rows = null
@@ -104,7 +116,11 @@ fun HomeScreen(
 
     fun exportPdf() {
         if (list.isEmpty()) {
-            Toast.makeText(ctx, ctx.getString(R.string.err_no_days_export), Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                ctx,
+                ctx.getString(R.string.err_no_days_export),
+                Toast.LENGTH_SHORT
+            ).show()
             return
         }
         scope.launch {
@@ -114,17 +130,44 @@ fun HomeScreen(
                 }
                 PdfExport.share(ctx, file)
             } catch (e: Exception) {
-                Toast.makeText(ctx, ctx.getString(R.string.err_export), Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    ctx,
+                    ctx.getString(R.string.err_export),
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
     }
 
-    val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val statusBarPadding = WindowInsets.statusBars
+        .asPaddingValues()
+        .calculateTopPadding()
 
     Box(
         Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
+            // ===== Swipe בין חודשים =====
+            .pointerInput(month, jobId) {
+                detectHorizontalDragGestures(
+                    onDragStart = { dragTotal = 0f },
+                    onDragEnd = {
+                        if (dragTotal < -swipeThresholdPx) {
+                            // החלקה שמאלה → חודש הבא
+                            onMonth(month.plusMonths(1))
+                        } else if (dragTotal > swipeThresholdPx) {
+                            // החלקה ימינה → חודש קודם
+                            onMonth(month.minusMonths(1))
+                        }
+                        dragTotal = 0f
+                    },
+                    onDragCancel = { dragTotal = 0f },
+                    onHorizontalDrag = { change, delta ->
+                        change.consume()
+                        dragTotal += delta
+                    }
+                )
+            }
     ) {
         Column(Modifier.fillMaxSize()) {
             // ======= סרגל עליון =======
@@ -234,7 +277,12 @@ fun HomeScreen(
                 Cell(stringResource(R.string.col_start), 1f, size = 16.sp)
                 Cell(stringResource(R.string.col_end), 1f, size = 16.sp)
                 Cell(stringResource(R.string.col_hours), 1f, size = 16.sp)
-                Cell(stringResource(R.string.col_pay), 1.2f, bold = true, size = 16.sp)
+                Cell(
+                    stringResource(R.string.col_pay),
+                    1.2f,
+                    bold = true,
+                    size = 16.sp
+                )
             }
             Line()
 
@@ -259,7 +307,10 @@ fun HomeScreen(
                                 .padding(horizontal = 8.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Box(Modifier.width(44.dp), contentAlignment = Alignment.Center) {
+                            Box(
+                                Modifier.width(44.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
                                 Box(
                                     Modifier
                                         .size(34.dp)
@@ -300,13 +351,15 @@ fun HomeScreen(
                     size = 16.sp
                 )
                 Cell(
-                    stringResource(R.string.hours_label) + ": " + Calc.fmtHours(totalMin),
+                    stringResource(R.string.hours_label) + ": " +
+                        Calc.fmtHours(totalMin),
                     1.2f,
                     color = Color.White,
                     size = 16.sp
                 )
                 Cell(
-                    stringResource(R.string.pay_label) + ": ₪" + Calc.fmtPay(totalPay),
+                    stringResource(R.string.pay_label) + ": ₪" +
+                        Calc.fmtPay(totalPay),
                     1.3f,
                     bold = true,
                     color = Color.White,
@@ -337,6 +390,14 @@ fun HomeScreen(
             DialItem(stringResource(R.string.payments), Icons.Default.Payments) {
                 expanded = false
                 onPayments()
+            },
+            DialItem(stringResource(R.string.yearly_summary), Icons.Default.CalendarMonth) {
+                expanded = false
+                onYearly()
+            },
+            DialItem(stringResource(R.string.graph), Icons.Default.BarChart) {
+                expanded = false
+                onGraph()
             },
             DialItem(stringResource(R.string.export_pdf), Icons.Default.Share) {
                 expanded = false
@@ -369,7 +430,10 @@ fun HomeScreen(
                         ) {
                             Text(
                                 item.label,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                modifier = Modifier.padding(
+                                    horizontal = 10.dp,
+                                    vertical = 6.dp
+                                ),
                                 fontSize = 14.sp
                             )
                         }
