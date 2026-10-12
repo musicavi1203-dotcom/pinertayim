@@ -194,13 +194,9 @@ abstract class AppDb : RoomDatabase() {
 }
 
 // ============================================================
-// Helper: DayRow + loadMonth
+// Helper: DayRow + MonthSummary
 // ============================================================
 
-/**
- * Represents one row in the main table.
- * Includes rate + segments (with mires) so the PDF can show a per-segment breakdown.
- */
 data class DayRow(
     val id: Long,
     val date: LocalDate,
@@ -212,6 +208,16 @@ data class DayRow(
     val segments: List<SegmentEntity> = emptyList()
 )
 
+data class MonthSummary(
+    val month: YearMonth,
+    val days: Int,
+    val minutes: Int,
+    val pay: Double
+)
+
+/**
+ * טוען את כל הימים של חודש עם פרקים.
+ */
 fun loadMonth(ctx: Context, jobId: Long, m: YearMonth): List<DayRow> {
     val dao = AppDb.get(ctx).dao()
     val days = dao.daysInRange(
@@ -232,6 +238,43 @@ fun loadMonth(ctx: Context, jobId: Long, m: YearMonth): List<DayRow> {
             pay = s.sumOf { Calc.pay(it, d.rate) },
             rate = d.rate,
             segments = s
+        )
+    }
+}
+
+/**
+ * טוען סיכום שנתי — 12 חודשים.
+ */
+fun loadYear(ctx: Context, jobId: Long, year: Int): List<MonthSummary> {
+    val dao = AppDb.get(ctx).dao()
+    val from = LocalDate.of(year, 1, 1).toString()
+    val to = LocalDate.of(year + 1, 1, 1).toString()
+    val days = dao.daysInRange(jobId, from, to)
+    if (days.isEmpty()) {
+        return (1..12).map { m ->
+            MonthSummary(YearMonth.of(year, m), 0, 0, 0.0)
+        }
+    }
+    val byDay = dao.segmentsFor(days.map { it.id }).groupBy { it.dayId }
+    val byMonth = days.groupBy {
+        val d = LocalDate.parse(it.date)
+        YearMonth.of(d.year, d.month)
+    }
+    return (1..12).map { m ->
+        val ym = YearMonth.of(year, m)
+        val monthDays = byMonth[ym].orEmpty()
+        var totalMinutes = 0
+        var totalPay = 0.0
+        monthDays.forEach { d ->
+            val segs = byDay[d.id].orEmpty()
+            totalMinutes += segs.sumOf { Calc.minutes(it) }
+            totalPay += segs.sumOf { Calc.pay(it, d.rate) }
+        }
+        MonthSummary(
+            month = ym,
+            days = monthDays.size,
+            minutes = totalMinutes,
+            pay = totalPay
         )
     }
 }
@@ -275,6 +318,22 @@ object Calc {
         DayOfWeek.THURSDAY -> "ה׳"
         DayOfWeek.FRIDAY -> "ו׳"
         DayOfWeek.SATURDAY -> "ש׳"
+    }
+
+    fun hebrewMonth(m: Int): String = when (m) {
+        1 -> "ינואר"
+        2 -> "פברואר"
+        3 -> "מרץ"
+        4 -> "אפריל"
+        5 -> "מאי"
+        6 -> "יוני"
+        7 -> "יולי"
+        8 -> "אוגוסט"
+        9 -> "ספטמבר"
+        10 -> "אוקטובר"
+        11 -> "נובמבר"
+        12 -> "דצמבר"
+        else -> ""
     }
 }
 
