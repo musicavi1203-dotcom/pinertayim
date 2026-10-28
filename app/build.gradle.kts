@@ -16,7 +16,6 @@ android {
         versionName = "1.0"
     }
 
-    // ===== חתימה קבועה — לקרוא מהסביבה (CI) =====
     signingConfigs {
         create("release") {
             val ksPath = System.getenv("KEYSTORE_PATH")
@@ -31,7 +30,6 @@ android {
 
     buildTypes {
         debug {
-            // חתימה גם ל-debug עם אותו מפתח — כדי שעדכונים יעבדו
             val ksPath = System.getenv("KEYSTORE_PATH")
             if (ksPath != null) {
                 signingConfig = signingConfigs.getByName("release")
@@ -87,6 +85,9 @@ dependencies {
 
     // WorkManager (לתזכורת)
     implementation("androidx.work:work-runtime-ktx:2.9.1")
+
+    // Gson (לגיבוי JSON)
+    implementation("com.google.code.gson:gson:2.10.1")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
