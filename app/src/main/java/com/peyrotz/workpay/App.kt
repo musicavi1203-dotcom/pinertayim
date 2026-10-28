@@ -192,7 +192,8 @@ fun App() {
                             }
                         },
                         onAddJob = { addJob(it, false) },
-                        onClose = { screen = Screen.Home }
+                        onClose = { screen = Screen.Home },
+                        onRefresh = { reloadJobs() } // 🆕 שורה חדשה
                     )
 
                     is Screen.Payments -> PaymentsScreen(
