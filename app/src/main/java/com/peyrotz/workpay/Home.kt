@@ -1,6 +1,11 @@
 package com.peyrotz.workpay
 
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -8,6 +13,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -147,27 +153,6 @@ fun HomeScreen(
         Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            // ===== Swipe בין חודשים =====
-            .pointerInput(month, jobId) {
-                detectHorizontalDragGestures(
-                    onDragStart = { dragTotal = 0f },
-                    onDragEnd = {
-                        if (dragTotal < -swipeThresholdPx) {
-                            // החלקה שמאלה → חודש הבא
-                            onMonth(month.plusMonths(1))
-                        } else if (dragTotal > swipeThresholdPx) {
-                            // החלקה ימינה → חודש קודם
-                            onMonth(month.minusMonths(1))
-                        }
-                        dragTotal = 0f
-                    },
-                    onDragCancel = { dragTotal = 0f },
-                    onHorizontalDrag = { change, delta ->
-                        change.consume()
-                        dragTotal += delta
-                    }
-                )
-            }
     ) {
         Column(Modifier.fillMaxSize()) {
             // ======= סרגל עליון =======
@@ -287,7 +272,29 @@ fun HomeScreen(
             Line()
 
             // ======= רשימת ימים =======
-            Box(Modifier.weight(1f)) {
+            // שים לב: ההחלקה מוגדרת כאן ולא על כל המסך — כדי לא להפריע ללחיצה על ה-FAB
+            Box(
+                Modifier
+                    .weight(1f)
+                    .pointerInput(month, jobId) {
+                        detectHorizontalDragGestures(
+                            onDragStart = { dragTotal = 0f },
+                            onDragEnd = {
+                                if (dragTotal < -swipeThresholdPx) {
+                                    onMonth(month.plusMonths(1))
+                                } else if (dragTotal > swipeThresholdPx) {
+                                    onMonth(month.minusMonths(1))
+                                }
+                                dragTotal = 0f
+                            },
+                            onDragCancel = { dragTotal = 0f },
+                            onHorizontalDrag = { change, delta ->
+                                change.consume()
+                                dragTotal += delta
+                            }
+                        )
+                    }
+            ) {
                 if (rows != null && list.isEmpty()) {
                     Text(
                         stringResource(R.string.no_days),
@@ -298,7 +305,11 @@ fun HomeScreen(
                         color = Color.Gray
                     )
                 }
-                LazyColumn(Modifier.fillMaxSize()) {
+                LazyColumn(
+                    Modifier.fillMaxSize(),
+                    // 🆕 תיקון: ריווח תחתון כדי שהפריט האחרון לא יוסתר ע"י ה-FAB והפס התחתון
+                    contentPadding = PaddingValues(bottom = 120.dp)
+                ) {
                     items(list, key = { it.id }) { r ->
                         Row(
                             Modifier
@@ -381,7 +392,7 @@ fun HomeScreen(
             )
         }
 
-        // ======= FAB עם תפריט =======
+        // ======= FAB עם תפריט ואנימציה =======
         val dialItems = listOf(
             DialItem(stringResource(R.string.add_day), Icons.Default.Add) {
                 expanded = false
@@ -420,34 +431,45 @@ fun HomeScreen(
             horizontalAlignment = Alignment.End,
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            if (expanded) {
-                dialItems.forEach { item ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = Color.White,
-                            shadowElevation = 2.dp
-                        ) {
-                            Text(
-                                item.label,
-                                modifier = Modifier.padding(
-                                    horizontal = 10.dp,
-                                    vertical = 6.dp
-                                ),
-                                fontSize = 14.sp
-                            )
-                        }
-                        Spacer(Modifier.width(10.dp))
-                        SmallFloatingActionButton(
-                            onClick = item.onClick,
-                            containerColor = primary,
-                            contentColor = Color.White
-                        ) {
-                            Icon(item.icon, contentDescription = item.label)
+            // 🆕 אנימציה לפתיחת/סגירת הכפתורים
+            AnimatedVisibility(
+                visible = expanded,
+                enter = fadeIn() + expandVertically(expandFrom = Alignment.Bottom),
+                exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Bottom)
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    dialItems.forEach { item ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color.White,
+                                shadowElevation = 2.dp
+                            ) {
+                                Text(
+                                    item.label,
+                                    modifier = Modifier.padding(
+                                        horizontal = 10.dp,
+                                        vertical = 6.dp
+                                    ),
+                                    fontSize = 14.sp
+                                )
+                            }
+                            Spacer(Modifier.width(10.dp))
+                            SmallFloatingActionButton(
+                                onClick = item.onClick,
+                                containerColor = primary,
+                                contentColor = Color.White
+                            ) {
+                                Icon(item.icon, contentDescription = item.label)
+                            }
                         }
                     }
                 }
             }
+            
             FloatingActionButton(
                 onClick = { expanded = !expanded },
                 containerColor = primary,
