@@ -162,6 +162,25 @@ abstract class AppDao {
 
     @Query("DELETE FROM payments WHERE id = :id")
     abstract fun deletePayment(id: Long)
+
+    // ============================================================
+    // 🆕 אופטימיזציה: חישוב סה"כ הכנסות ישירות ב-SQL
+    // ============================================================
+
+    /**
+     * מחזיר את סכום השכר הכולל של כל הימים של עבודה מסוימת.
+     * החישוב מתבצע במנוע ה-SQLite במקום לטעון את כל הנתונים לזיכרון.
+     * הנוסחה: (דקות / 60.0) * מיירס * תעריף היום.
+     */
+    @Query("""
+        SELECT COALESCE(SUM(
+            (CASE WHEN s.endMin >= s.startMin THEN s.endMin - s.startMin ELSE s.endMin - s.startMin + 1440 END) / 60.0 * s.mirros * d.rate
+        ), 0.0)
+        FROM segments s
+        INNER JOIN days d ON s.dayId = d.id
+        WHERE d.jobId = :jobId
+    """)
+    abstract fun totalEarnedForJob(jobId: Long): Double
 }
 
 // ============================================================
