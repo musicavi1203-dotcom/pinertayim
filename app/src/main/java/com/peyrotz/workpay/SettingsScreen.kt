@@ -1,6 +1,7 @@
 package com.peyrotz.workpay
 
 import android.app.TimePickerDialog
+import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -30,6 +31,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -60,6 +62,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun SettingsScreen(
@@ -70,7 +75,7 @@ fun SettingsScreen(
     onDeleteJob: (Long) -> Unit,
     onAddJob: (String) -> Unit,
     onClose: () -> Unit,
-    onRefresh: () -> Unit // 🆕 פרמטר לרענון אחרי שחזור
+    onRefresh: () -> Unit
 ) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -83,7 +88,32 @@ fun SettingsScreen(
     var reminderHour by remember { mutableStateOf(Prefs.reminderHour(ctx)) }
     var reminderMinute by remember { mutableStateOf(Prefs.reminderMinute(ctx)) }
 
-    // 🆕 Launchers לגיבוי ושחזור
+    // Auto Backup State
+    var autoBackupUri by remember { mutableStateOf(Prefs.autoBackupFolder(ctx)) }
+    var lastBackupTime by remember { mutableStateOf(Prefs.lastAutoBackup(ctx)) }
+
+    // Folder Picker
+    val folderPickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                // שמירת הרשאה קבועה לתיקייה
+                ctx.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+                Prefs.setAutoBackupFolder(ctx, uri.toString())
+                autoBackupUri = uri.toString()
+                AutoBackupScheduler.schedule(ctx)
+                Toast.makeText(ctx, "תיקיית הגיבוי נשמרה!", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(ctx, "שגיאה בשמירת ההרשאה", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    // Manual Export/Import Launchers
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
     ) { uri: Uri? ->
@@ -115,25 +145,16 @@ fun SettingsScreen(
     val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
     Column(Modifier.fillMaxSize()) {
-        // ======= סרגל עליון =======
+        // Top bar
         Row(
             Modifier
                 .fillMaxWidth()
                 .background(MaterialTheme.colorScheme.primary)
-                .padding(
-                    top = statusBarPadding + 8.dp,
-                    start = 4.dp,
-                    end = 8.dp,
-                    bottom = 8.dp
-                ),
+                .padding(top = statusBarPadding + 8.dp, start = 4.dp, end = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onClose) {
-                Icon(
-                    Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = stringResource(R.string.back),
-                    tint = Color.White
-                )
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = Color.White)
             }
             Text(
                 stringResource(R.string.settings_title),
@@ -150,7 +171,7 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
-            // ======= מקומות עבודה =======
+            // Jobs
             Text(
                 stringResource(R.string.jobs_label),
                 fontSize = 18.sp,
@@ -168,36 +189,23 @@ fun SettingsScreen(
                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                 ) {
                     Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
+                        Modifier.fillMaxWidth().padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            j.name,
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Text(
-                            "₪" + Calc.fmtPay(j.defaultRate) + " " +
-                                stringResource(R.string.per_hour),
-                            color = Color.Gray
-                        )
+                        Text(j.name, fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        Text("₪" + Calc.fmtPay(j.defaultRate) + " " + stringResource(R.string.per_hour), color = Color.Gray)
                     }
                 }
             }
 
             OutlinedButton(
                 onClick = { addDialog = true },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp)
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
             ) {
                 Text(stringResource(R.string.add_job))
             }
 
-            // ======= 🆕 גיבוי ושחזור =======
+            // ======= גיבוי ושחזור =======
             Text(
                 "גיבוי ושחזור נתונים",
                 fontSize = 18.sp,
@@ -211,35 +219,50 @@ fun SettingsScreen(
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
                 Column(Modifier.padding(16.dp)) {
-                    Text(
-                        "שמור את כל הנתונים בקובץ אחד, או שחזר מקובץ קיים.",
-                        fontSize = 14.sp,
-                        color = Color.Gray,
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
-                    Button(
-                        onClick = {
-                            val date = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US).format(java.util.Date())
-                            exportLauncher.launch("pinertayim_backup_$date.json")
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(20.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("ייצוא גיבוי (שמירה)")
+                    // גיבוי אוטומטי (תיקייה)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Folder, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("גיבוי אוטומטי", fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                            val folderName = autoBackupUri?.let { Uri.parse(it).lastPathSegment } ?: "לא נבחרה תיקייה"
+                            Text(folderName, fontSize = 12.sp, color = Color.Gray, maxLines = 1)
+                            if (lastBackupTime > 0) {
+                                val fmt = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.US).format(Date(lastBackupTime))
+                                Text("גיבוי אחרון: $fmt", fontSize = 11.sp, color = Color.Gray)
+                            }
+                        }
+                        OutlinedButton(onClick = { folderPickerLauncher.launch(null) }) {
+                            Text(if (autoBackupUri == null) "בחר" else "שנה")
+                        }
                     }
                     
-                    Spacer(Modifier.padding(top = 8.dp))
-                    
-                    OutlinedButton(
-                        onClick = {
-                            importLauncher.launch(arrayOf("application/json"))
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(20.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("ייבוא גיבוי (שחזור)")
+                    Spacer(Modifier.padding(top = 16.dp))
+                    Box(Modifier.fillMaxWidth().background(Color(0xFFEEEEEE)).padding(vertical = 1.dp))
+                    Spacer(Modifier.padding(top = 16.dp))
+
+                    // גיבוי ידני
+                    Text("גיבוי ידני (קובץ בודד)", fontSize = 14.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 8.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = {
+                                val date = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
+                                exportLauncher.launch("pinertayim_backup_$date.json")
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("ייצוא", fontSize = 14.sp)
+                        }
+                        OutlinedButton(
+                            onClick = { importLauncher.launch(arrayOf("application/json")) },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("שחזור", fontSize = 14.sp)
+                        }
                     }
                 }
             }
@@ -259,24 +282,13 @@ fun SettingsScreen(
             ) {
                 Column(Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Default.Notifications,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(24.dp)
-                        )
+                        Icon(Icons.Default.Notifications, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
+                            Text(stringResource(R.string.reminder_desc), fontSize = 15.sp, fontWeight = FontWeight.Medium)
                             Text(
-                                stringResource(R.string.reminder_desc),
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                if (reminderOn) stringResource(R.string.reminder_on)
-                                else stringResource(R.string.reminder_off),
-                                fontSize = 13.sp,
-                                color = Color.Gray
+                                if (reminderOn) stringResource(R.string.reminder_on) else stringResource(R.string.reminder_off),
+                                fontSize = 13.sp, color = Color.Gray
                             )
                         }
                         Switch(
@@ -292,38 +304,19 @@ fun SettingsScreen(
                     if (reminderOn) {
                         Spacer(Modifier.padding(top = 12.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                stringResource(R.string.reminder_time),
-                                modifier = Modifier.weight(1f),
-                                fontSize = 15.sp
-                            )
+                            Text(stringResource(R.string.reminder_time), modifier = Modifier.weight(1f), fontSize = 15.sp)
                             OutlinedButton(
                                 onClick = {
-                                    TimePickerDialog(
-                                        ctx,
-                                        { _, h, m ->
-                                            reminderHour = h
-                                            reminderMinute = m
-                                            Prefs.setReminderHour(ctx, h)
-                                            Prefs.setReminderMinute(ctx, m)
-                                            Reminder.schedule(ctx)
-                                        },
-                                        reminderHour,
-                                        reminderMinute,
-                                        true
-                                    ).show()
+                                    TimePickerDialog(ctx, { _, h, m ->
+                                        reminderHour = h
+                                        reminderMinute = m
+                                        Prefs.setReminderHour(ctx, h)
+                                        Prefs.setReminderMinute(ctx, m)
+                                        Reminder.schedule(ctx)
+                                    }, reminderHour, reminderMinute, true).show()
                                 }
                             ) {
-                                Text(
-                                    String.format(
-                                        java.util.Locale.US,
-                                        "%02d:%02d",
-                                        reminderHour,
-                                        reminderMinute
-                                    ),
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
+                                Text(String.format(Locale.US, "%02d:%02d", reminderHour, reminderMinute), fontSize = 16.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -340,9 +333,7 @@ fun SettingsScreen(
 
             Palette.chunked(4).forEachIndexed { row, colors ->
                 Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 6.dp),
+                    Modifier.fillMaxWidth().padding(vertical = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     colors.forEachIndexed { col, c ->
@@ -352,21 +343,11 @@ fun SettingsScreen(
                                 .size(52.dp)
                                 .clip(CircleShape)
                                 .background(Color(c))
-                                .then(
-                                    if (index == colorIdx)
-                                        Modifier.border(3.dp, Color.Black, CircleShape)
-                                    else Modifier
-                                )
+                                .then(if (index == colorIdx) Modifier.border(3.dp, Color.Black, CircleShape) else Modifier)
                                 .clickable { onColor(index) },
                             contentAlignment = Alignment.Center
                         ) {
-                            if (index == colorIdx) {
-                                Icon(
-                                    Icons.Default.Check,
-                                    contentDescription = null,
-                                    tint = Color.White
-                                )
-                            }
+                            if (index == colorIdx) Icon(Icons.Default.Check, contentDescription = null, tint = Color.White)
                         }
                     }
                 }
@@ -376,43 +357,26 @@ fun SettingsScreen(
         }
     }
 
-    // ======= דיאלוג עריכת עבודה =======
+    // Dialogs (Edit job, Delete job, Add job) - נשארו זהים לחלוטין
     val ej = editing
     if (ej != null) {
         var nameText by remember(ej.id) { mutableStateOf(ej.name) }
-        var rateText by remember(ej.id) {
-            mutableStateOf(Calc.fmtRateInput(ej.defaultRate))
-        }
+        var rateText by remember(ej.id) { mutableStateOf(Calc.fmtRateInput(ej.defaultRate)) }
         AlertDialog(
             onDismissRequest = { editing = null },
             title = { Text(stringResource(R.string.edit_job)) },
             text = {
                 Column {
-                    OutlinedTextField(
-                        value = nameText,
-                        onValueChange = { nameText = it },
-                        label = { Text(stringResource(R.string.job_name)) },
-                        singleLine = true
-                    )
+                    OutlinedTextField(value = nameText, onValueChange = { nameText = it }, label = { Text(stringResource(R.string.job_name)) }, singleLine = true)
                     Spacer(Modifier.padding(top = 8.dp))
                     OutlinedTextField(
-                        value = rateText,
-                        onValueChange = { rateText = it },
-                        label = { Text(stringResource(R.string.job_rate)) },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Decimal
-                        )
+                        value = rateText, onValueChange = { rateText = it },
+                        label = { Text(stringResource(R.string.job_rate)) }, singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                     )
                     if (jobs.size > 1) {
-                        TextButton(onClick = {
-                            deleting = ej
-                            editing = null
-                        }) {
-                            Text(
-                                stringResource(R.string.delete),
-                                color = Color(0xFFD32F2F)
-                            )
+                        TextButton(onClick = { deleting = ej; editing = null }) {
+                            Text(stringResource(R.string.delete), color = Color(0xFFD32F2F))
                         }
                     }
                 }
@@ -430,42 +394,21 @@ fun SettingsScreen(
                     }
                 }) { Text(stringResource(R.string.save)) }
             },
-            dismissButton = {
-                TextButton(onClick = { editing = null }) {
-                    Text(stringResource(R.string.cancel))
-                }
-            }
+            dismissButton = { TextButton(onClick = { editing = null }) { Text(stringResource(R.string.cancel)) } }
         )
     }
 
-    // ======= דיאלוג מחיקת עבודה =======
     val dj = deleting
     if (dj != null) {
         AlertDialog(
             onDismissRequest = { deleting = null },
             text = { Text(stringResource(R.string.confirm_delete_job)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    onDeleteJob(dj.id)
-                    deleting = null
-                }) { Text(stringResource(R.string.delete)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { deleting = null }) {
-                    Text(stringResource(R.string.cancel))
-                }
-            }
+            confirmButton = { TextButton(onClick = { onDeleteJob(dj.id); deleting = null }) { Text(stringResource(R.string.delete)) } },
+            dismissButton = { TextButton(onClick = { deleting = null }) { Text(stringResource(R.string.cancel)) } }
         )
     }
 
-    // ======= דיאלוג הוספת עבודה =======
     if (addDialog) {
-        NameDialog(
-            onDismiss = { addDialog = false },
-            onOk = {
-                addDialog = false
-                onAddJob(it)
-            }
-        )
+        NameDialog(onDismiss = { addDialog = false }, onOk = { addDialog = false; onAddJob(it) })
     }
 }
