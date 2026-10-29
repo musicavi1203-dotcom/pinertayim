@@ -35,21 +35,20 @@ jobs:
             exit 1
           fi
           echo "$KEYSTORE_BASE64" | base64 -d > $RUNNER_TEMP/keystore.jks
-          ls -la $RUNNER_TEMP/keystore.jks
 
-      - name: Build Debug APK
+      - name: Build Release APK
         env:
           KEYSTORE_PATH: ${{ runner.temp }}/keystore.jks
           KEYSTORE_PASSWORD: pinertayim2026
           KEY_ALIAS: pinertayim
           KEY_PASSWORD: pinertayim2026
-        run: gradle assembleDebug --no-daemon --stacktrace
+        run: gradle assembleRelease --no-daemon --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug
-          path: app/build/outputs/apk/debug/*.apk
+          name: app-release
+          path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 30
 
