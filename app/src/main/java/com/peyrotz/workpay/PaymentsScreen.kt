@@ -3,8 +3,6 @@ package com.peyrotz.workpay
 import android.app.DatePickerDialog
 import android.widget.Toast
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,8 +15,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -59,7 +55,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
-import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -82,16 +77,9 @@ fun PaymentsScreen(
     suspend fun loadAll() {
         withContext(Dispatchers.IO) {
             val dao = AppDb.get(ctx).dao()
-            val ps = dao.paymentsOfJob(jobId)
-            val allDays = dao.allDaysOfJob(jobId)
-            val byDay = if (allDays.isEmpty()) emptyMap()
-            else dao.segmentsFor(allDays.map { it.id }).groupBy { it.dayId }
-            val earned = allDays.sumOf { d ->
-                val s = byDay[d.id].orEmpty()
-                s.sumOf { Calc.pay(it, d.rate) }
-            }
-            payments = ps
-            earnedTotal = earned
+            // 🚀 אופטימיזציה: חישוב הכנסות ישירות ב-SQL
+            payments = dao.paymentsOfJob(jobId)
+            earnedTotal = dao.totalEarnedForJob(jobId)
         }
     }
 
