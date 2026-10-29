@@ -160,6 +160,7 @@ fun HomeScreen(
             .background(MaterialTheme.colorScheme.background)
     ) {
         Column(Modifier.fillMaxSize()) {
+            // ======= סרגל עליון =======
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -214,6 +215,7 @@ fun HomeScreen(
                 )
             }
 
+            // ======= שורת חודש + חצים =======
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -221,10 +223,11 @@ fun HomeScreen(
                     .padding(horizontal = 8.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // חץ ימינה (הבא)
                 IconButton(onClick = {
                     scope.launch {
                         pagerState.animateScrollToPage(
-                            page = pagerState.currentPage - 1,
+                            page = pagerState.currentPage + 1,
                             animationSpec = tween(durationMillis = ARROW_ANIM_MS)
                         )
                     }
@@ -238,10 +241,11 @@ fun HomeScreen(
                     textAlign = TextAlign.Center,
                     modifier = Modifier.weight(1f)
                 )
+                // חץ שמאלה (קודם)
                 IconButton(onClick = {
                     scope.launch {
                         pagerState.animateScrollToPage(
-                            page = pagerState.currentPage + 1,
+                            page = pagerState.currentPage - 1,
                             animationSpec = tween(durationMillis = ARROW_ANIM_MS)
                         )
                     }
@@ -250,26 +254,29 @@ fun HomeScreen(
                 }
             }
 
+            // ======= כותרות טבלה =======
             Row(
                 Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 8.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Spacer(Modifier.width(44.dp))
                 Cell(stringResource(R.string.col_date), 1.1f, size = 16.sp)
                 Cell(stringResource(R.string.col_start), 1f, size = 16.sp)
                 Cell(stringResource(R.string.col_end), 1f, size = 16.sp)
                 Cell(stringResource(R.string.col_hours), 1f, size = 16.sp)
                 Cell(stringResource(R.string.col_pay), 1.2f, bold = true, size = 16.sp)
+                Spacer(Modifier.width(44.dp)) // מקום לעיגול של היום
             }
             Line()
 
+            // ======= Pager =======
             Box(Modifier.weight(1f)) {
                 HorizontalPager(
                     state = pagerState,
                     modifier = Modifier.fillMaxSize(),
-                    pageSpacing = 0.dp
+                    pageSpacing = 0.dp,
+                    beyondBoundsPageCount = 1 // טוען מראש את החודש הבא והקודם
                 ) { page ->
                     val pageMonth = YearMonth.of(2020, 1).plusMonths((page - CENTER_PAGE).toLong())
                     var rows by remember(pageMonth) { mutableStateOf(rowsCache[pageMonth]) }
@@ -311,6 +318,13 @@ fun HomeScreen(
                                                 .padding(horizontal = 8.dp, vertical = 10.dp),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
+                                            Cell("${r.date.dayOfMonth}/${r.date.monthValue}", 1.1f)
+                                            Cell(Calc.fmtTime(r.startMin), 1f)
+                                            Cell(Calc.fmtTime(r.endMin), 1f)
+                                            Cell(Calc.fmtHours(r.minutes), 1f)
+                                            Cell(Calc.fmtPay(r.pay), 1.2f, bold = true, size = 16.sp)
+                                            
+                                            // העיגול של היום עכשיו בסוף השורה
                                             Box(Modifier.width(44.dp), contentAlignment = Alignment.Center) {
                                                 Box(
                                                     Modifier.size(34.dp).clip(CircleShape).background(primary),
@@ -319,11 +333,6 @@ fun HomeScreen(
                                                     Text(Calc.dayLetter(r.date.dayOfWeek), color = Color.White, fontSize = 14.sp)
                                                 }
                                             }
-                                            Cell("${r.date.dayOfMonth}/${r.date.monthValue}", 1.1f)
-                                            Cell(Calc.fmtTime(r.startMin), 1f)
-                                            Cell(Calc.fmtTime(r.endMin), 1f)
-                                            Cell(Calc.fmtHours(r.minutes), 1f)
-                                            Cell(Calc.fmtPay(r.pay), 1.2f, bold = true, size = 16.sp)
                                         }
                                         Line()
                                     }
@@ -331,6 +340,7 @@ fun HomeScreen(
                             }
                         }
 
+                        // פס סיכום תחתון
                         Row(
                             Modifier
                                 .fillMaxWidth()
@@ -347,6 +357,7 @@ fun HomeScreen(
             }
         }
 
+        // רקע כהה לתפריט
         if (expanded) {
             Box(
                 Modifier
@@ -356,6 +367,7 @@ fun HomeScreen(
             )
         }
 
+        // FAB
         val dialItems = listOf(
             DialItem(stringResource(R.string.add_day), Icons.Default.Add) { expanded = false; onAdd() },
             DialItem(stringResource(R.string.payments), Icons.Default.Payments) { expanded = false; onPayments() },
