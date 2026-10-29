@@ -83,11 +83,14 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.4")
 
-    // WorkManager (לתזכורת)
+    // WorkManager (לתזכורת ולגיבוי אוטומטי)
     implementation("androidx.work:work-runtime-ktx:2.9.1")
 
     // Gson (לגיבוי JSON)
     implementation("com.google.code.gson:gson:2.10.1")
+
+    // 🆕 DocumentFile (לגישה לתיקיות - AutoBackup)
+    implementation("androidx.documentfile:documentfile:1.0.1")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
