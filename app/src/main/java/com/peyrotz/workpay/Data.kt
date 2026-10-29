@@ -163,14 +163,9 @@ abstract class AppDao {
     @Query("DELETE FROM payments WHERE id = :id")
     abstract fun deletePayment(id: Long)
 
-    // ============================================================
-    // 🆕 אופטימיזציה: חישוב סה"כ הכנסות ישירות ב-SQL
-    // ============================================================
-
+    // ---------- Aggregations (Optimization) ----------
     /**
-     * מחזיר את סכום השכר הכולל של כל הימים של עבודה מסוימת.
-     * החישוב מתבצע במנוע ה-SQLite במקום לטעון את כל הנתונים לזיכרון.
-     * הנוסחה: (דקות / 60.0) * מיירס * תעריף היום.
+     * סכום השכר של כל הימים של עבודה מסוימת — מחושב ב-SQL.
      */
     @Query("""
         SELECT COALESCE(SUM(
@@ -234,9 +229,6 @@ data class MonthSummary(
     val pay: Double
 )
 
-/**
- * טוען את כל הימים של חודש עם פרקים.
- */
 fun loadMonth(ctx: Context, jobId: Long, m: YearMonth): List<DayRow> {
     val dao = AppDb.get(ctx).dao()
     val days = dao.daysInRange(
@@ -261,9 +253,6 @@ fun loadMonth(ctx: Context, jobId: Long, m: YearMonth): List<DayRow> {
     }
 }
 
-/**
- * טוען סיכום שנתי — 12 חודשים.
- */
 fun loadYear(ctx: Context, jobId: Long, year: Int): List<MonthSummary> {
     val dao = AppDb.get(ctx).dao()
     val from = LocalDate.of(year, 1, 1).toString()
@@ -383,6 +372,8 @@ object Prefs {
     private const val KEY_REMINDER_ON = "reminder_on"
     private const val KEY_REMINDER_HOUR = "reminder_hour"
     private const val KEY_REMINDER_MIN = "reminder_min"
+    private const val KEY_AUTO_BACKUP_FOLDER = "auto_backup_folder"
+    private const val KEY_LAST_AUTO_BACKUP = "last_auto_backup"
 
     private fun p(ctx: Context) = ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
@@ -411,5 +402,19 @@ object Prefs {
     fun reminderMinute(ctx: Context): Int = p(ctx).getInt(KEY_REMINDER_MIN, 0)
     fun setReminderMinute(ctx: Context, m: Int) {
         p(ctx).edit().putInt(KEY_REMINDER_MIN, m).apply()
+    }
+
+    // ===== 🆕 גיבוי אוטומטי =====
+    fun autoBackupFolder(ctx: Context): String? = p(ctx).getString(KEY_AUTO_BACKUP_FOLDER, null)
+    fun setAutoBackupFolder(ctx: Context, uriString: String?) {
+        p(ctx).edit().apply {
+            if (uriString == null) remove(KEY_AUTO_BACKUP_FOLDER)
+            else putString(KEY_AUTO_BACKUP_FOLDER, uriString)
+        }.apply()
+    }
+
+    fun lastAutoBackup(ctx: Context): Long = p(ctx).getLong(KEY_LAST_AUTO_BACKUP, 0L)
+    fun setLastAutoBackup(ctx: Context, millis: Long) {
+        p(ctx).edit().putLong(KEY_LAST_AUTO_BACKUP, millis).apply()
     }
 }
