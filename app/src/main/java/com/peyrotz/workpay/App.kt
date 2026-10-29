@@ -90,7 +90,10 @@ fun App() {
     val scope = rememberCoroutineScope()
     var colorIdx by remember { mutableStateOf(Prefs.colorIndex(ctx)) }
     var screen by remember { mutableStateOf<Screen>(Screen.Home) }
+    
+    // חודש ברירת מחדל - היום
     var month by remember { mutableStateOf(YearMonth.now()) }
+    
     var jobs by remember { mutableStateOf<List<JobEntity>>(emptyList()) }
     var jobsLoaded by remember { mutableStateOf(false) }
     var jobId by remember { mutableStateOf(Prefs.selectedJob(ctx)) }
@@ -150,10 +153,15 @@ fun App() {
                         jobs = jobs,
                         jobId = job.id,
                         month = month,
-                        onMonth = { month = it },
+                        onMonth = { 
+                            // 🆕 עדכון החודש מה-Pager
+                            month = it 
+                        },
                         onSelectJob = {
                             jobId = it
                             Prefs.setSelectedJob(ctx, it)
+                            // כשמחליפים עבודה - חוזרים להיום
+                            month = YearMonth.now()
                         },
                         onAddJob = { addJob(it, true) },
                         onAdd = {
@@ -193,7 +201,7 @@ fun App() {
                         },
                         onAddJob = { addJob(it, false) },
                         onClose = { screen = Screen.Home },
-                        onRefresh = { reloadJobs() } // 🆕 שורה חדשה
+                        onRefresh = { reloadJobs() } 
                     )
 
                     is Screen.Payments -> PaymentsScreen(
