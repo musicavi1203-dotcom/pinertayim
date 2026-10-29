@@ -2,6 +2,7 @@ package com.peyrotz.workpay
 
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -82,15 +83,20 @@ import java.util.Locale
 
 private data class DialItem(val label: String, val icon: ImageVector, val onClick: () -> Unit)
 
-// מספר דפים עצום כדי לאפשר גלילה "אינסופית" קדימה ואחורה
 private const val INFINITE_PAGES = 1_000_000
 private const val CENTER_PAGE = INFINITE_PAGES / 2
+
+/**
+ * אנימציה חלקה לחצים.
+ * 600ms עם easing עדין — נותן תחושה של "גלילה חלשה ואיטית".
+ */
+private const val ARROW_ANIM_MS = 600
 
 @Composable
 fun HomeScreen(
     jobs: List<JobEntity>,
     jobId: Long,
-    month: YearMonth, // המסך הראשי מחזיק את החודש (כדי לשמור עליו בין מסכים)
+    month: YearMonth,
     onMonth: (YearMonth) -> Unit,
     onSelectJob: (Long) -> Unit,
     onAddJob: (String) -> Unit,
@@ -110,31 +116,28 @@ fun HomeScreen(
     var addJobDialog by remember { mutableStateOf(false) }
 
     // ===== Pager State =====
-    val currentPage = remember { CENTER_PAGE }
     val pagerState = rememberPagerState(initialPage = CENTER_PAGE, pageCount = { INFINITE_PAGES })
 
-    // כדי שהפסנתר יתחיל תמיד על החודש הנוכחי כשהמסך נפתח בפעם הראשונה
+    // Init on the current month on first open
     LaunchedEffect(Unit) {
         pagerState.scrollToPage(CENTER_PAGE + month.toMonthsSinceEpoch())
     }
 
-    // מזהה מתי ה-Pager מתחלף ומעדכן את החודש ב-State של App
+    // Sync pager -> month state
     LaunchedEffect(pagerState) {
         snapshotFlow { pagerState.currentPage }.collect { page ->
-            val newMonth = YearMonth.from(
-                YearMonth.of(2020, 1).plusMonths(page - CENTER_PAGE)
-            )
+            val newMonth = YearMonth.of(2020, 1).plusMonths(page - CENTER_PAGE)
             if (newMonth != month) {
                 onMonth(newMonth)
             }
         }
     }
 
-    val currentDisplayedMonth = YearMonth.of(2020, 1).plusMonths(pagerState.currentPage - CENTER_PAGE)
+    val currentDisplayedMonth = YearMonth.of(2020, 1)
+        .plusMonths(pagerState.currentPage - CENTER_PAGE)
     val jobName = jobs.firstOrNull { it.id == jobId }?.name ?: ""
     val today = LocalDate.now()
 
-    // מטמון נתונים לפי חודש (כדי לא לטעון מחדש כשמחליקים אחורה)
     val rowsCache = remember { mutableStateMapOf<YearMonth, List<DayRow>>() }
 
     fun exportPdf() {
@@ -156,6 +159,9 @@ fun HomeScreen(
     }
 
     val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+
+    // 🆕 אנימציה עדינה לחצים — tween ארוך יותר
+    val arrowSpec = tween<Float>(durationMillis = ARROW_ANIM_MS)
 
     Box(
         Modifier
@@ -218,7 +224,7 @@ fun HomeScreen(
                 )
             }
 
-            // ======= שורת חודש =======
+            // ======= שורת חודש + חצים =======
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -228,7 +234,11 @@ fun HomeScreen(
             ) {
                 IconButton(onClick = {
                     scope.launch {
-                        pagerState.animateScrollToPage(pagerState.currentPage - 1)
+                        // 🆕 אנימציה חלקה לחץ שמאלה (חודש קודם)
+                        pagerState.animateScrollToPage(
+                            page = pagerState.currentPage - 1,
+                            animationSpec = tween(durationMillis = ARROW_ANIM_MS)
+                        )
                     }
                 }) {
                     Icon(Icons.Default.KeyboardArrowRight, contentDescription = null, tint = Color.White)
@@ -242,7 +252,11 @@ fun HomeScreen(
                 )
                 IconButton(onClick = {
                     scope.launch {
-                        pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                        // 🆕 אנימציה חלקה לחץ ימינה (חודש הבא)
+                        pagerState.animateScrollToPage(
+                            page = pagerState.currentPage + 1,
+                            animationSpec = tween(durationMillis = ARROW_ANIM_MS)
+                        )
                     }
                 }) {
                     Icon(Icons.Default.KeyboardArrowLeft, contentDescription = null, tint = Color.White)
@@ -265,20 +279,16 @@ fun HomeScreen(
             }
             Line()
 
-            // ======= ה-Pager שמכיל את כל החודשים =======
+            // ======= Pager =======
             Box(Modifier.weight(1f)) {
                 HorizontalPager(
                     state = pagerState,
                     modifier = Modifier.fillMaxSize(),
                     pageSpacing = 0.dp
                 ) { page ->
-                    // חישוב החודש של הדף הנוכחי
                     val pageMonth = YearMonth.of(2020, 1).plusMonths(page - CENTER_PAGE)
-                    
-                    // רשימה פנימית לדף הזה
                     var rows by remember(pageMonth) { mutableStateOf(rowsCache[pageMonth]) }
-                    
-                    // טעינת נתונים כשלא קיימים במטמון
+
                     LaunchedEffect(pageMonth, jobId) {
                         if (rows == null) {
                             rows = withContext(Dispatchers.IO) { loadMonth(ctx, jobId, pageMonth) }
@@ -291,7 +301,6 @@ fun HomeScreen(
                     val totalPay = list.sumOf { it.pay }
 
                     Column(Modifier.fillMaxSize()) {
-                        // רשימת הימים - החלקה חלקה
                         Box(Modifier.weight(1f)) {
                             if (rows == null) {
                                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -337,7 +346,6 @@ fun HomeScreen(
                             }
                         }
 
-                        // פס סיכום תחתון - ספציפי לדף הזה
                         Row(
                             Modifier
                                 .fillMaxWidth()
@@ -364,7 +372,7 @@ fun HomeScreen(
             )
         }
 
-        // FAB עם אנימציה
+        // FAB
         val dialItems = listOf(
             DialItem(stringResource(R.string.add_day), Icons.Default.Add) { expanded = false; onAdd() },
             DialItem(stringResource(R.string.payments), Icons.Default.Payments) { expanded = false; onPayments() },
@@ -374,7 +382,12 @@ fun HomeScreen(
             DialItem(stringResource(R.string.jump_today), Icons.Default.Home) {
                 expanded = false
                 val targetPage = CENTER_PAGE + YearMonth.now().toMonthsSinceEpoch()
-                scope.launch { pagerState.animateScrollToPage(targetPage) }
+                scope.launch {
+                    pagerState.animateScrollToPage(
+                        page = targetPage,
+                        animationSpec = tween(durationMillis = ARROW_ANIM_MS)
+                    )
+                }
             },
             DialItem(stringResource(R.string.settings), Icons.Default.Settings) { expanded = false; onSettings() }
         )
