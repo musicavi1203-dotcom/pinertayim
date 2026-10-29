@@ -7,6 +7,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -85,13 +86,9 @@ private data class DialItem(val label: String, val icon: ImageVector, val onClic
 
 private const val INFINITE_PAGES = 1_000_000
 private const val CENTER_PAGE = INFINITE_PAGES / 2
-
-/**
- * אנימציה חלקה לחצים.
- * 600ms עם easing עדין — נותן תחושה של "גלילה חלשה ואיטית".
- */
 private const val ARROW_ANIM_MS = 600
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HomeScreen(
     jobs: List<JobEntity>,
@@ -115,18 +112,15 @@ fun HomeScreen(
     var menuOpen by remember { mutableStateOf(false) }
     var addJobDialog by remember { mutableStateOf(false) }
 
-    // ===== Pager State =====
     val pagerState = rememberPagerState(initialPage = CENTER_PAGE, pageCount = { INFINITE_PAGES })
 
-    // Init on the current month on first open
     LaunchedEffect(Unit) {
         pagerState.scrollToPage(CENTER_PAGE + month.toMonthsSinceEpoch())
     }
 
-    // Sync pager -> month state
     LaunchedEffect(pagerState) {
         snapshotFlow { pagerState.currentPage }.collect { page ->
-            val newMonth = YearMonth.of(2020, 1).plusMonths(page - CENTER_PAGE)
+            val newMonth = YearMonth.of(2020, 1).plusMonths((page - CENTER_PAGE).toLong())
             if (newMonth != month) {
                 onMonth(newMonth)
             }
@@ -134,7 +128,7 @@ fun HomeScreen(
     }
 
     val currentDisplayedMonth = YearMonth.of(2020, 1)
-        .plusMonths(pagerState.currentPage - CENTER_PAGE)
+        .plusMonths((pagerState.currentPage - CENTER_PAGE).toLong())
     val jobName = jobs.firstOrNull { it.id == jobId }?.name ?: ""
     val today = LocalDate.now()
 
@@ -160,16 +154,12 @@ fun HomeScreen(
 
     val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
-    // 🆕 אנימציה עדינה לחצים — tween ארוך יותר
-    val arrowSpec = tween<Float>(durationMillis = ARROW_ANIM_MS)
-
     Box(
         Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
         Column(Modifier.fillMaxSize()) {
-            // ======= סרגל עליון =======
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -224,7 +214,6 @@ fun HomeScreen(
                 )
             }
 
-            // ======= שורת חודש + חצים =======
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -234,7 +223,6 @@ fun HomeScreen(
             ) {
                 IconButton(onClick = {
                     scope.launch {
-                        // 🆕 אנימציה חלקה לחץ שמאלה (חודש קודם)
                         pagerState.animateScrollToPage(
                             page = pagerState.currentPage - 1,
                             animationSpec = tween(durationMillis = ARROW_ANIM_MS)
@@ -252,7 +240,6 @@ fun HomeScreen(
                 )
                 IconButton(onClick = {
                     scope.launch {
-                        // 🆕 אנימציה חלקה לחץ ימינה (חודש הבא)
                         pagerState.animateScrollToPage(
                             page = pagerState.currentPage + 1,
                             animationSpec = tween(durationMillis = ARROW_ANIM_MS)
@@ -263,7 +250,6 @@ fun HomeScreen(
                 }
             }
 
-            // ======= כותרות טבלה =======
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -279,14 +265,13 @@ fun HomeScreen(
             }
             Line()
 
-            // ======= Pager =======
             Box(Modifier.weight(1f)) {
                 HorizontalPager(
                     state = pagerState,
                     modifier = Modifier.fillMaxSize(),
                     pageSpacing = 0.dp
                 ) { page ->
-                    val pageMonth = YearMonth.of(2020, 1).plusMonths(page - CENTER_PAGE)
+                    val pageMonth = YearMonth.of(2020, 1).plusMonths((page - CENTER_PAGE).toLong())
                     var rows by remember(pageMonth) { mutableStateOf(rowsCache[pageMonth]) }
 
                     LaunchedEffect(pageMonth, jobId) {
@@ -362,7 +347,6 @@ fun HomeScreen(
             }
         }
 
-        // רקע כהה לתפריט
         if (expanded) {
             Box(
                 Modifier
@@ -372,7 +356,6 @@ fun HomeScreen(
             )
         }
 
-        // FAB
         val dialItems = listOf(
             DialItem(stringResource(R.string.add_day), Icons.Default.Add) { expanded = false; onAdd() },
             DialItem(stringResource(R.string.payments), Icons.Default.Payments) { expanded = false; onPayments() },
@@ -433,7 +416,6 @@ fun HomeScreen(
     }
 }
 
-// פונקציית עזר: כמה חודשים עברו מ-2020-01
 private fun YearMonth.toMonthsSinceEpoch(): Int {
     return (year - 2020) * 12 + (monthValue - 1)
 }
