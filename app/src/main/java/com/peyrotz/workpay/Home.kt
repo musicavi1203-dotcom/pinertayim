@@ -118,8 +118,9 @@ fun HomeScreen(
         pagerState.scrollToPage(CENTER_PAGE + month.toMonthsSinceEpoch())
     }
 
+    // 🆕 שינוי ל-settledPage: מעדכן את המצב רק כשההחלקה מסתיימת לגמרי (מונע קפיצות)
     LaunchedEffect(pagerState) {
-        snapshotFlow { pagerState.currentPage }.collect { page ->
+        snapshotFlow { pagerState.settledPage }.collect { page ->
             val newMonth = YearMonth.of(2020, 1).plusMonths((page - CENTER_PAGE).toLong())
             if (newMonth != month) {
                 onMonth(newMonth)
@@ -160,17 +161,12 @@ fun HomeScreen(
             .background(MaterialTheme.colorScheme.background)
     ) {
         Column(Modifier.fillMaxSize()) {
-            // ======= סרגל עליון =======
+            // סרגל עליון
             Row(
                 Modifier
                     .fillMaxWidth()
                     .background(primary)
-                    .padding(
-                        top = statusBarPadding + 12.dp,
-                        start = 16.dp,
-                        end = 16.dp,
-                        bottom = 14.dp
-                    ),
+                    .padding(top = statusBarPadding + 12.dp, start = 16.dp, end = 16.dp, bottom = 14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(Modifier.weight(1f)) {
@@ -178,44 +174,30 @@ fun HomeScreen(
                         Modifier.clickable { menuOpen = true },
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            jobName,
-                            color = Color.White,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1
-                        )
+                        Text(jobName, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                         Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = Color.White)
                     }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                         jobs.forEach { j ->
                             DropdownMenuItem(
                                 text = { Text(j.name) },
-                                onClick = {
-                                    menuOpen = false
-                                    onSelectJob(j.id)
-                                }
+                                onClick = { menuOpen = false; onSelectJob(j.id) }
                             )
                         }
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.add_job)) },
                             leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) },
-                            onClick = {
-                                menuOpen = false
-                                addJobDialog = true
-                            }
+                            onClick = { menuOpen = false; addJobDialog = true }
                         )
                     }
                 }
                 Text(
                     "${today.dayOfMonth}/${today.monthValue}",
-                    color = Color.White,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold
+                    color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold
                 )
             }
 
-            // ======= שורת חודש + חצים =======
+            // שורת חודש
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -223,42 +205,29 @@ fun HomeScreen(
                     .padding(horizontal = 8.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // חץ ימינה (הבא)
                 IconButton(onClick = {
                     scope.launch {
-                        pagerState.animateScrollToPage(
-                            page = pagerState.currentPage + 1,
-                            animationSpec = tween(durationMillis = ARROW_ANIM_MS)
-                        )
+                        pagerState.animateScrollToPage(pagerState.currentPage + 1, animationSpec = tween(ARROW_ANIM_MS))
                     }
                 }) {
                     Icon(Icons.Default.KeyboardArrowRight, contentDescription = null, tint = Color.White)
                 }
                 Text(
                     currentDisplayedMonth.format(DateTimeFormatter.ofPattern("LLLL yyyy", he)),
-                    color = Color.White,
-                    fontSize = 18.sp,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.weight(1f)
+                    color = Color.White, fontSize = 18.sp, textAlign = TextAlign.Center, modifier = Modifier.weight(1f)
                 )
-                // חץ שמאלה (קודם)
                 IconButton(onClick = {
                     scope.launch {
-                        pagerState.animateScrollToPage(
-                            page = pagerState.currentPage - 1,
-                            animationSpec = tween(durationMillis = ARROW_ANIM_MS)
-                        )
+                        pagerState.animateScrollToPage(pagerState.currentPage - 1, animationSpec = tween(ARROW_ANIM_MS))
                     }
                 }) {
                     Icon(Icons.Default.KeyboardArrowLeft, contentDescription = null, tint = Color.White)
                 }
             }
 
-            // ======= כותרות טבלה =======
+            // כותרות טבלה
             Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 10.dp),
+                Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Cell(stringResource(R.string.col_date), 1.1f, size = 16.sp)
@@ -266,17 +235,17 @@ fun HomeScreen(
                 Cell(stringResource(R.string.col_end), 1f, size = 16.sp)
                 Cell(stringResource(R.string.col_hours), 1f, size = 16.sp)
                 Cell(stringResource(R.string.col_pay), 1.2f, bold = true, size = 16.sp)
-                Spacer(Modifier.width(44.dp)) // מקום לעיגול של היום
+                Spacer(Modifier.width(44.dp)) // מקום לעיגול היום
             }
             Line()
 
-            // ======= Pager =======
+            // Pager
             Box(Modifier.weight(1f)) {
                 HorizontalPager(
                     state = pagerState,
                     modifier = Modifier.fillMaxSize(),
-                    pageSpacing = 0.dp,
-                    beyondBoundsPageCount = 1 // טוען מראש את החודש הבא והקודם
+                    pageSpacing = 0.dp
+                    // 🆕 הסרנו את beyondBoundsPageCount כדי למנוע קפיצות
                 ) { page ->
                     val pageMonth = YearMonth.of(2020, 1).plusMonths((page - CENTER_PAGE).toLong())
                     var rows by remember(pageMonth) { mutableStateOf(rowsCache[pageMonth]) }
@@ -306,16 +275,10 @@ fun HomeScreen(
                                     color = Color.Gray
                                 )
                             } else {
-                                LazyColumn(
-                                    Modifier.fillMaxSize(),
-                                    contentPadding = PaddingValues(bottom = 120.dp)
-                                ) {
+                                LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 120.dp)) {
                                     items(list, key = { it.id }) { r ->
                                         Row(
-                                            Modifier
-                                                .fillMaxWidth()
-                                                .clickable { onOpen(r.id) }
-                                                .padding(horizontal = 8.dp, vertical = 10.dp),
+                                            Modifier.fillMaxWidth().clickable { onOpen(r.id) }.padding(horizontal = 8.dp, vertical = 10.dp),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Cell("${r.date.dayOfMonth}/${r.date.monthValue}", 1.1f)
@@ -324,12 +287,8 @@ fun HomeScreen(
                                             Cell(Calc.fmtHours(r.minutes), 1f)
                                             Cell(Calc.fmtPay(r.pay), 1.2f, bold = true, size = 16.sp)
                                             
-                                            // העיגול של היום עכשיו בסוף השורה
                                             Box(Modifier.width(44.dp), contentAlignment = Alignment.Center) {
-                                                Box(
-                                                    Modifier.size(34.dp).clip(CircleShape).background(primary),
-                                                    contentAlignment = Alignment.Center
-                                                ) {
+                                                Box(Modifier.size(34.dp).clip(CircleShape).background(primary), contentAlignment = Alignment.Center) {
                                                     Text(Calc.dayLetter(r.date.dayOfWeek), color = Color.White, fontSize = 14.sp)
                                                 }
                                             }
@@ -342,10 +301,7 @@ fun HomeScreen(
 
                         // פס סיכום תחתון
                         Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .background(primary)
-                                .padding(horizontal = 12.dp, vertical = 16.dp),
+                            Modifier.fillMaxWidth().background(primary).padding(horizontal = 12.dp, vertical = 16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Cell(stringResource(R.string.days_count) + ": " + list.size, 1f, color = Color.White, size = 16.sp)
@@ -359,12 +315,7 @@ fun HomeScreen(
 
         // רקע כהה לתפריט
         if (expanded) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(Color(0x66000000))
-                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { expanded = false }
-            )
+            Box(Modifier.fillMaxSize().background(Color(0x66000000)).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { expanded = false })
         }
 
         // FAB
@@ -377,32 +328,17 @@ fun HomeScreen(
             DialItem(stringResource(R.string.jump_today), Icons.Default.Home) {
                 expanded = false
                 val targetPage = CENTER_PAGE + YearMonth.now().toMonthsSinceEpoch()
-                scope.launch {
-                    pagerState.animateScrollToPage(
-                        page = targetPage,
-                        animationSpec = tween(durationMillis = ARROW_ANIM_MS)
-                    )
-                }
+                scope.launch { pagerState.animateScrollToPage(targetPage, animationSpec = tween(ARROW_ANIM_MS)) }
             },
             DialItem(stringResource(R.string.settings), Icons.Default.Settings) { expanded = false; onSettings() }
         )
 
         Column(
-            Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 16.dp, bottom = 76.dp),
-            horizontalAlignment = Alignment.End,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 76.dp),
+            horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            AnimatedVisibility(
-                visible = expanded,
-                enter = fadeIn() + expandVertically(expandFrom = Alignment.Bottom),
-                exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Bottom)
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.End,
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
+            AnimatedVisibility(visible = expanded, enter = fadeIn() + expandVertically(expandFrom = Alignment.Bottom), exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Bottom)) {
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     dialItems.forEach { item ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Surface(shape = RoundedCornerShape(8.dp), color = Color.White, shadowElevation = 2.dp) {
