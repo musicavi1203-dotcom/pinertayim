@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -54,6 +55,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -111,6 +113,7 @@ fun HomeScreen(
     var expanded by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     var addJobDialog by remember { mutableStateOf(false) }
+    var showExportDialog by remember { mutableStateOf(false) } // דיאלוג ייצוא
 
     val pagerState = rememberPagerState(initialPage = CENTER_PAGE, pageCount = { INFINITE_PAGES })
 
@@ -118,7 +121,7 @@ fun HomeScreen(
         pagerState.scrollToPage(CENTER_PAGE + month.toMonthsSinceEpoch())
     }
 
-    // 🆕 שינוי ל-settledPage: מעדכן את המצב רק כשההחלקה מסתיימת לגמרי (מונע קפיצות)
+    // תיקון הזליגה: שימוש ב-settledPage במקום currentPage
     LaunchedEffect(pagerState) {
         snapshotFlow { pagerState.settledPage }.collect { page ->
             val newMonth = YearMonth.of(2020, 1).plusMonths((page - CENTER_PAGE).toLong())
@@ -132,10 +135,9 @@ fun HomeScreen(
         .plusMonths((pagerState.currentPage - CENTER_PAGE).toLong())
     val jobName = jobs.firstOrNull { it.id == jobId }?.name ?: ""
     val today = LocalDate.now()
-
     val rowsCache = remember { mutableStateMapOf<YearMonth, List<DayRow>>() }
 
-    fun exportPdf() {
+    fun exportMonthlyPdf() {
         val rows = rowsCache[currentDisplayedMonth] ?: emptyList()
         if (rows.isEmpty()) {
             Toast.makeText(ctx, ctx.getString(R.string.err_no_days_export), Toast.LENGTH_SHORT).show()
@@ -143,9 +145,23 @@ fun HomeScreen(
         }
         scope.launch {
             try {
-                val file = withContext(Dispatchers.IO) {
-                    PdfExport.create(ctx, jobName, currentDisplayedMonth, rows)
+                val file = withContext(Dispatchers.IO) { PdfExport.create(ctx, jobName, currentDisplayedMonth, rows) }
+                PdfExport.share(ctx, file)
+            } catch (e: Exception) {
+                Toast.makeText(ctx, ctx.getString(R.string.err_export), Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    fun exportYearlyPdf() {
+        scope.launch {
+            try {
+                val rows = withContext(Dispatchers.IO) { loadYearDays(ctx, jobId, currentDisplayedMonth.year) }
+                if (rows.isEmpty()) {
+                    Toast.makeText(ctx, ctx.getString(R.string.err_no_days_export), Toast.LENGTH_SHORT).show()
+                    return@launch
                 }
+                val file = withContext(Dispatchers.IO) { PdfExport.createYearly(ctx, jobName, currentDisplayedMonth.year, rows) }
                 PdfExport.share(ctx, file)
             } catch (e: Exception) {
                 Toast.makeText(ctx, ctx.getString(R.string.err_export), Toast.LENGTH_SHORT).show()
@@ -155,98 +171,51 @@ fun HomeScreen(
 
     val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-    ) {
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(Modifier.fillMaxSize()) {
             // סרגל עליון
             Row(
-                Modifier
-                    .fillMaxWidth()
-                    .background(primary)
-                    .padding(top = statusBarPadding + 12.dp, start = 16.dp, end = 16.dp, bottom = 14.dp),
+                Modifier.fillMaxWidth().background(primary).padding(top = statusBarPadding + 12.dp, start = 16.dp, end = 16.dp, bottom = 14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(Modifier.weight(1f)) {
-                    Row(
-                        Modifier.clickable { menuOpen = true },
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                    Row(Modifier.clickable { menuOpen = true }, verticalAlignment = Alignment.CenterVertically) {
                         Text(jobName, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                         Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = Color.White)
                     }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                        jobs.forEach { j ->
-                            DropdownMenuItem(
-                                text = { Text(j.name) },
-                                onClick = { menuOpen = false; onSelectJob(j.id) }
-                            )
-                        }
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.add_job)) },
-                            leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) },
-                            onClick = { menuOpen = false; addJobDialog = true }
-                        )
+                        jobs.forEach { j -> DropdownMenuItem(text = { Text(j.name) }, onClick = { menuOpen = false; onSelectJob(j.id) }) }
+                        DropdownMenuItem(text = { Text(stringResource(R.string.add_job)) }, leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) }, onClick = { menuOpen = false; addJobDialog = true })
                     }
                 }
-                Text(
-                    "${today.dayOfMonth}/${today.monthValue}",
-                    color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold
-                )
+                Text("${today.dayOfMonth}/${today.monthValue}", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             }
 
             // שורת חודש
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .background(primary)
-                    .padding(horizontal = 8.dp, vertical = 2.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = {
-                    scope.launch {
-                        pagerState.animateScrollToPage(pagerState.currentPage + 1, animationSpec = tween(ARROW_ANIM_MS))
-                    }
-                }) {
+            Row(Modifier.fillMaxWidth().background(primary).padding(horizontal = 8.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1, animationSpec = tween(ARROW_ANIM_MS)) } }) {
                     Icon(Icons.Default.KeyboardArrowRight, contentDescription = null, tint = Color.White)
                 }
-                Text(
-                    currentDisplayedMonth.format(DateTimeFormatter.ofPattern("LLLL yyyy", he)),
-                    color = Color.White, fontSize = 18.sp, textAlign = TextAlign.Center, modifier = Modifier.weight(1f)
-                )
-                IconButton(onClick = {
-                    scope.launch {
-                        pagerState.animateScrollToPage(pagerState.currentPage - 1, animationSpec = tween(ARROW_ANIM_MS))
-                    }
-                }) {
+                Text(currentDisplayedMonth.format(DateTimeFormatter.ofPattern("LLLL yyyy", he)), color = Color.White, fontSize = 18.sp, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+                IconButton(onClick = { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1, animationSpec = tween(ARROW_ANIM_MS)) } }) {
                     Icon(Icons.Default.KeyboardArrowLeft, contentDescription = null, tint = Color.White)
                 }
             }
 
             // כותרות טבלה
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 Cell(stringResource(R.string.col_date), 1.1f, size = 16.sp)
                 Cell(stringResource(R.string.col_start), 1f, size = 16.sp)
                 Cell(stringResource(R.string.col_end), 1f, size = 16.sp)
                 Cell(stringResource(R.string.col_hours), 1f, size = 16.sp)
                 Cell(stringResource(R.string.col_pay), 1.2f, bold = true, size = 16.sp)
-                Spacer(Modifier.width(44.dp)) // מקום לעיגול היום
+                Spacer(Modifier.width(44.dp))
             }
             Line()
 
             // Pager
             Box(Modifier.weight(1f)) {
-                HorizontalPager(
-                    state = pagerState,
-                    modifier = Modifier.fillMaxSize(),
-                    pageSpacing = 0.dp
-                    // 🆕 הסרנו את beyondBoundsPageCount כדי למנוע קפיצות
-                ) { page ->
+                HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize(), pageSpacing = 0.dp) { page ->
                     val pageMonth = YearMonth.of(2020, 1).plusMonths((page - CENTER_PAGE).toLong())
                     var rows by remember(pageMonth) { mutableStateOf(rowsCache[pageMonth]) }
 
@@ -264,29 +233,18 @@ fun HomeScreen(
                     Column(Modifier.fillMaxSize()) {
                         Box(Modifier.weight(1f)) {
                             if (rows == null) {
-                                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                    CircularProgressIndicator(color = primary)
-                                }
+                                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = primary) }
                             } else if (list.isEmpty()) {
-                                Text(
-                                    stringResource(R.string.no_days),
-                                    modifier = Modifier.fillMaxWidth().padding(32.dp),
-                                    textAlign = TextAlign.Center,
-                                    color = Color.Gray
-                                )
+                                Text(stringResource(R.string.no_days), modifier = Modifier.fillMaxWidth().padding(32.dp), textAlign = TextAlign.Center, color = Color.Gray)
                             } else {
                                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 120.dp)) {
                                     items(list, key = { it.id }) { r ->
-                                        Row(
-                                            Modifier.fillMaxWidth().clickable { onOpen(r.id) }.padding(horizontal = 8.dp, vertical = 10.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
+                                        Row(Modifier.fillMaxWidth().clickable { onOpen(r.id) }.padding(horizontal = 8.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                                             Cell("${r.date.dayOfMonth}/${r.date.monthValue}", 1.1f)
                                             Cell(Calc.fmtTime(r.startMin), 1f)
                                             Cell(Calc.fmtTime(r.endMin), 1f)
                                             Cell(Calc.fmtHours(r.minutes), 1f)
                                             Cell(Calc.fmtPay(r.pay), 1.2f, bold = true, size = 16.sp)
-                                            
                                             Box(Modifier.width(44.dp), contentAlignment = Alignment.Center) {
                                                 Box(Modifier.size(34.dp).clip(CircleShape).background(primary), contentAlignment = Alignment.Center) {
                                                     Text(Calc.dayLetter(r.date.dayOfWeek), color = Color.White, fontSize = 14.sp)
@@ -300,10 +258,7 @@ fun HomeScreen(
                         }
 
                         // פס סיכום תחתון
-                        Row(
-                            Modifier.fillMaxWidth().background(primary).padding(horizontal = 12.dp, vertical = 16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                        Row(Modifier.fillMaxWidth().background(primary).padding(horizontal = 12.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                             Cell(stringResource(R.string.days_count) + ": " + list.size, 1f, color = Color.White, size = 16.sp)
                             Cell(stringResource(R.string.hours_label) + ": " + Calc.fmtHours(totalMin), 1.2f, color = Color.White, size = 16.sp)
                             Cell(stringResource(R.string.pay_label) + ": ₪" + Calc.fmtPay(totalPay), 1.3f, bold = true, color = Color.White, size = 16.sp)
@@ -313,7 +268,7 @@ fun HomeScreen(
             }
         }
 
-        // רקע כהה לתפריט
+        // רקע כהה
         if (expanded) {
             Box(Modifier.fillMaxSize().background(Color(0x66000000)).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { expanded = false })
         }
@@ -324,19 +279,15 @@ fun HomeScreen(
             DialItem(stringResource(R.string.payments), Icons.Default.Payments) { expanded = false; onPayments() },
             DialItem(stringResource(R.string.yearly_summary), Icons.Default.CalendarMonth) { expanded = false; onYearly() },
             DialItem(stringResource(R.string.graph), Icons.Default.BarChart) { expanded = false; onGraph() },
-            DialItem(stringResource(R.string.export_pdf), Icons.Default.Share) { expanded = false; exportPdf() },
+            DialItem(stringResource(R.string.export_pdf), Icons.Default.Share) { expanded = false; showExportDialog = true }, // פותח דיאלוג
             DialItem(stringResource(R.string.jump_today), Icons.Default.Home) {
                 expanded = false
-                val targetPage = CENTER_PAGE + YearMonth.now().toMonthsSinceEpoch()
-                scope.launch { pagerState.animateScrollToPage(targetPage, animationSpec = tween(ARROW_ANIM_MS)) }
+                scope.launch { pagerState.animateScrollToPage(CENTER_PAGE + YearMonth.now().toMonthsSinceEpoch(), animationSpec = tween(ARROW_ANIM_MS)) }
             },
             DialItem(stringResource(R.string.settings), Icons.Default.Settings) { expanded = false; onSettings() }
         )
 
-        Column(
-            Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 76.dp),
-            horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
+        Column(Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 76.dp), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
             AnimatedVisibility(visible = expanded, enter = fadeIn() + expandVertically(expandFrom = Alignment.Bottom), exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Bottom)) {
                 Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     dialItems.forEach { item ->
@@ -352,7 +303,6 @@ fun HomeScreen(
                     }
                 }
             }
-            
             FloatingActionButton(onClick = { expanded = !expanded }, containerColor = primary, contentColor = Color.White) {
                 Icon(if (expanded) Icons.Default.Close else Icons.Default.MoreVert, contentDescription = stringResource(R.string.more))
             }
@@ -361,6 +311,27 @@ fun HomeScreen(
 
     if (addJobDialog) {
         NameDialog(onDismiss = { addJobDialog = false }, onOk = { addJobDialog = false; onAddJob(it) })
+    }
+
+    // 🆕 דיאלוג בחירת סוג ייצוא
+    if (showExportDialog) {
+        AlertDialog(
+            onDismissRequest = { showExportDialog = false },
+            title = { Text("ייצוא ל-PDF") },
+            text = { Text("מה תרצה לייצא?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showExportDialog = false
+                    exportMonthlyPdf()
+                }) { Text("חודש נוכחי") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showExportDialog = false
+                    exportYearlyPdf()
+                }) { Text("שנה שלמה") }
+            }
+        )
     }
 }
 
