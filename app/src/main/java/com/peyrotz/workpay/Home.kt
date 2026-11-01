@@ -113,7 +113,7 @@ fun HomeScreen(
     var expanded by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     var addJobDialog by remember { mutableStateOf(false) }
-    var showExportDialog by remember { mutableStateOf(false) } // דיאלוג ייצוא
+    var showExportDialog by remember { mutableStateOf(false) }
 
     val pagerState = rememberPagerState(initialPage = CENTER_PAGE, pageCount = { INFINITE_PAGES })
 
@@ -121,7 +121,6 @@ fun HomeScreen(
         pagerState.scrollToPage(CENTER_PAGE + month.toMonthsSinceEpoch())
     }
 
-    // תיקון הזליגה: שימוש ב-settledPage במקום currentPage
     LaunchedEffect(pagerState) {
         snapshotFlow { pagerState.settledPage }.collect { page ->
             val newMonth = YearMonth.of(2020, 1).plusMonths((page - CENTER_PAGE).toLong())
@@ -240,11 +239,22 @@ fun HomeScreen(
                                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 120.dp)) {
                                     items(list, key = { it.id }) { r ->
                                         Row(Modifier.fillMaxWidth().clickable { onOpen(r.id) }.padding(horizontal = 8.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                            Cell("${r.date.dayOfMonth}/${r.date.monthValue}", 1.1f)
+                                            
+                                            // 🆕 עמודת תאריך + תפקיד אם יש חריגה
+                                            Box(Modifier.weight(1.1f), contentAlignment = Alignment.Center) {
+                                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                    Text("${r.date.dayOfMonth}/${r.date.monthValue}", textAlign = TextAlign.Center, fontSize = 15.sp, maxLines = 1)
+                                                    if (r.role.isNotBlank()) {
+                                                        Text(r.role, textAlign = TextAlign.Center, fontSize = 10.sp, color = Color.Gray, maxLines = 1, modifier = Modifier.padding(top = 2.dp))
+                                                    }
+                                                }
+                                            }
+                                            
                                             Cell(Calc.fmtTime(r.startMin), 1f)
                                             Cell(Calc.fmtTime(r.endMin), 1f)
                                             Cell(Calc.fmtHours(r.minutes), 1f)
                                             Cell(Calc.fmtPay(r.pay), 1.2f, bold = true, size = 16.sp)
+                                            
                                             Box(Modifier.width(44.dp), contentAlignment = Alignment.Center) {
                                                 Box(Modifier.size(34.dp).clip(CircleShape).background(primary), contentAlignment = Alignment.Center) {
                                                     Text(Calc.dayLetter(r.date.dayOfWeek), color = Color.White, fontSize = 14.sp)
@@ -279,7 +289,7 @@ fun HomeScreen(
             DialItem(stringResource(R.string.payments), Icons.Default.Payments) { expanded = false; onPayments() },
             DialItem(stringResource(R.string.yearly_summary), Icons.Default.CalendarMonth) { expanded = false; onYearly() },
             DialItem(stringResource(R.string.graph), Icons.Default.BarChart) { expanded = false; onGraph() },
-            DialItem(stringResource(R.string.export_pdf), Icons.Default.Share) { expanded = false; showExportDialog = true }, // פותח דיאלוג
+            DialItem(stringResource(R.string.export_pdf), Icons.Default.Share) { expanded = false; showExportDialog = true },
             DialItem(stringResource(R.string.jump_today), Icons.Default.Home) {
                 expanded = false
                 scope.launch { pagerState.animateScrollToPage(CENTER_PAGE + YearMonth.now().toMonthsSinceEpoch(), animationSpec = tween(ARROW_ANIM_MS)) }
@@ -313,7 +323,6 @@ fun HomeScreen(
         NameDialog(onDismiss = { addJobDialog = false }, onOk = { addJobDialog = false; onAddJob(it) })
     }
 
-    // 🆕 דיאלוג בחירת סוג ייצוא
     if (showExportDialog) {
         AlertDialog(
             onDismissRequest = { showExportDialog = false },
