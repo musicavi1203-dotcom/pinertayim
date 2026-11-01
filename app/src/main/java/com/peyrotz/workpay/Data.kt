@@ -85,7 +85,6 @@ data class PaymentEntity(
 @Dao
 abstract class AppDao {
 
-    // ---------- Jobs ----------
     @Query("SELECT * FROM jobs ORDER BY id")
     abstract fun jobs(): List<JobEntity>
 
@@ -107,7 +106,6 @@ abstract class AppDao {
         deleteJobRow(id)
     }
 
-    // ---------- Days & Segments ----------
     @Insert
     abstract fun insertDay(d: DayEntity): Long
 
@@ -150,7 +148,6 @@ abstract class AppDao {
         insertSegments(segs.map { it.copy(id = 0, dayId = id) })
     }
 
-    // ---------- Payments ----------
     @Query("SELECT * FROM payments WHERE jobId = :jobId ORDER BY date DESC")
     abstract fun paymentsOfJob(jobId: Long): List<PaymentEntity>
 
@@ -163,10 +160,6 @@ abstract class AppDao {
     @Query("DELETE FROM payments WHERE id = :id")
     abstract fun deletePayment(id: Long)
 
-    // ---------- Aggregations (Optimization) ----------
-    /**
-     * סכום השכר של כל הימים של עבודה מסוימת — מחושב ב-SQL.
-     */
     @Query("""
         SELECT COALESCE(SUM(
             (CASE WHEN s.endMin >= s.startMin THEN s.endMin - s.startMin ELSE s.endMin - s.startMin + 1440 END) / 60.0 * s.mirros * d.rate
@@ -177,10 +170,6 @@ abstract class AppDao {
     """)
     abstract fun totalEarnedForJob(jobId: Long): Double
 }
-
-// ============================================================
-// Database
-// ============================================================
 
 @Database(
     entities = [JobEntity::class, DayEntity::class, SegmentEntity::class, PaymentEntity::class],
@@ -253,15 +242,36 @@ fun loadMonth(ctx: Context, jobId: Long, m: YearMonth): List<DayRow> {
     }
 }
 
+// 🆕 טעינת כל השנה עבור ייצוא PDF
+fun loadYearDays(ctx: Context, jobId: Long, year: Int): List<DayRow> {
+    val dao = AppDb.get(ctx).dao()
+    val from = LocalDate.of(year, 1, 1).toString()
+    val to = LocalDate.of(year + 1, 1, 1).toString()
+    val days = dao.daysInRange(jobId, from, to)
+    if (days.isEmpty()) return emptyList()
+    val byDay = dao.segmentsFor(days.map { it.id }).groupBy { it.dayId }
+    return days.map { d ->
+        val s = byDay[d.id].orEmpty().sortedBy { it.startMin }
+        DayRow(
+            id = d.id,
+            date = LocalDate.parse(d.date),
+            startMin = s.firstOrNull()?.startMin ?: 0,
+            endMin = s.lastOrNull()?.endMin ?: 0,
+            minutes = s.sumOf { Calc.minutes(it) },
+            pay = s.sumOf { Calc.pay(it, d.rate) },
+            rate = d.rate,
+            segments = s
+        )
+    }
+}
+
 fun loadYear(ctx: Context, jobId: Long, year: Int): List<MonthSummary> {
     val dao = AppDb.get(ctx).dao()
     val from = LocalDate.of(year, 1, 1).toString()
     val to = LocalDate.of(year + 1, 1, 1).toString()
     val days = dao.daysInRange(jobId, from, to)
     if (days.isEmpty()) {
-        return (1..12).map { m ->
-            MonthSummary(YearMonth.of(year, m), 0, 0, 0.0)
-        }
+        return (1..12).map { m -> MonthSummary(YearMonth.of(year, m), 0, 0, 0.0) }
     }
     val byDay = dao.segmentsFor(days.map { it.id }).groupBy { it.dayId }
     val byMonth = days.groupBy {
@@ -286,10 +296,6 @@ fun loadYear(ctx: Context, jobId: Long, year: Int): List<MonthSummary> {
         )
     }
 }
-
-// ============================================================
-// Calc — כל החישובים
-// ============================================================
 
 object Calc {
     fun minutesOf(start: Int, end: Int): Int {
@@ -345,24 +351,10 @@ object Calc {
     }
 }
 
-// ============================================================
-// Palette — 8 ערכות צבע
-// ============================================================
-
 val Palette: List<Long> = listOf(
-    0xFF2644FFL, // כחול
-    0xFF00897BL, // טורקיז
-    0xFF2E7D32L, // ירוק
-    0xFFC8741BL, // כתום
-    0xFFD32F2FL, // אדום
-    0xFF7B1FA2L, // סגול
-    0xFFE91E63L, // ורוד
-    0xFF37474FL  // אפור כהה
+    0xFF2644FFL, 0xFF00897BL, 0xFF2E7D32L, 0xFFC8741BL,
+    0xFFD32F2FL, 0xFF7B1FA2L, 0xFFE91E63L, 0xFF37474FL
 )
-
-// ============================================================
-// Prefs — העדפות
-// ============================================================
 
 object Prefs {
     private const val FILE = "workpay_prefs"
@@ -404,7 +396,6 @@ object Prefs {
         p(ctx).edit().putInt(KEY_REMINDER_MIN, m).apply()
     }
 
-    // ===== 🆕 גיבוי אוטומטי =====
     fun autoBackupFolder(ctx: Context): String? = p(ctx).getString(KEY_AUTO_BACKUP_FOLDER, null)
     fun setAutoBackupFolder(ctx: Context, uriString: String?) {
         p(ctx).edit().apply {
