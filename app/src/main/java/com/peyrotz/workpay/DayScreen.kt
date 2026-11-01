@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -59,13 +60,9 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.UUID
 
-/**
- * ברירת מחדל לפרק חדש:
- * כניסה: 14:50, יציאה: 17:05, מיירס: 2
- */
 private const val DEFAULT_START_MIN = 14 * 60 + 50   // 14:50
 private const val DEFAULT_END_MIN = 17 * 60 + 5      // 17:05
-private const val DEFAULT_MIRROS = "2"               // 🆕 2 מיירס
+private const val DEFAULT_MIRROS = "2"               // 2 מיירס
 
 private data class SegUi(
     val uid: String = UUID.randomUUID().toString(),
@@ -109,6 +106,9 @@ fun DayScreen(
         )
     }
     var rateText by remember { mutableStateOf(Calc.fmtRateInput(defaultRate)) }
+    var role by remember { mutableStateOf("") } // 🆕 שדה תפקיד
+    var isException by remember { mutableStateOf(false) } // 🆕 האם זה יום חריג
+
     val segs = remember { mutableStateListOf<SegUi>() }
     var confirmDelete by remember { mutableStateOf(false) }
 
@@ -134,6 +134,8 @@ fun DayScreen(
             } else {
                 date = LocalDate.parse(d.date)
                 rateText = Calc.fmtRateInput(d.rate)
+                role = d.role
+                isException = d.role.isNotEmpty() // אם יש תפקיד, זה יום חריג
                 segs.clear()
                 loaded.second.forEach {
                     segs.add(
@@ -171,7 +173,20 @@ fun DayScreen(
         if (segs.any { (it.mirros.toIntOrNull() ?: 0) < 1 }) {
             toast(R.string.err_mirros); return
         }
-        val day = DayEntity(id = dayId, date = date.toString(), rate = rate, jobId = jobId)
+        if (isException && role.isBlank()) {
+            Toast.makeText(ctx, "יש להזין תפקיד ליום חריג", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        val finalRole = if (isException) role.trim() else ""
+        val day = DayEntity(
+            id = dayId, 
+            date = date.toString(), 
+            rate = rate, 
+            jobId = jobId, 
+            role = finalRole
+        )
+        
         val list = segs.map {
             SegmentEntity(
                 dayId = 0,
@@ -221,6 +236,23 @@ fun DayScreen(
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(start = 4.dp)
             )
+            
+            Spacer(Modifier.weight(1f))
+            
+            // 🆕 כפתור "חריגה" בצד שמאל
+            TextButton(onClick = { isException = !isException }) {
+                Icon(
+                    Icons.Default.Star,
+                    contentDescription = null,
+                    tint = if (isException) Color.Yellow else Color.White,
+                    modifier = Modifier.padding(end = 4.dp)
+                )
+                Text(
+                    if (isException) "בטל חריגה" else "חריגה",
+                    color = if (isException) Color.Yellow else Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
 
         Column(
@@ -250,6 +282,18 @@ fun DayScreen(
                 Text(
                     date.format(DateTimeFormatter.ofPattern("EEEE d/M/yyyy", he)),
                     fontSize = 16.sp
+                )
+            }
+
+            // 🆕 שדה תפקיד (אם זה יום חריג)
+            if (isException) {
+                Spacer(Modifier.padding(top = 12.dp))
+                OutlinedTextField(
+                    value = role,
+                    onValueChange = { role = it },
+                    label = { Text("תפקיד / מה עשיתי") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
 
