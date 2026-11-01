@@ -15,7 +15,7 @@ import java.util.Locale
 
 /**
  * ייצוא דוחות ל-PDF — ללא ספריות חיצוניות.
- * תומך בייצוא חודשי וייצוא שנתי.
+ * תומך בייצוא חודשי וייצוא שנתי, כולל תצוגת "תפקיד" לימים חריגים.
  */
 object PdfExport {
 
@@ -76,6 +76,13 @@ object PdfExport {
             color = Color.parseColor("#7A7A7A")
             textAlign = Paint.Align.CENTER
         }
+        // 🆕 צבע ופונט לתפקיד (חריגה) - טיפה יותר קטן כדי שייכנס
+        val rolePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            textSize = 9f
+            color = Color.parseColor("#2644FF") // כחול
+            textAlign = Paint.Align.CENTER
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
         val titlePaint = Paint(bold).apply {
             textSize = 20f
             textAlign = Paint.Align.RIGHT
@@ -115,7 +122,7 @@ object PdfExport {
             textAlign = Paint.Align.CENTER
         }
 
-        // ---------- 6 עמודות (RTL): תאריך, כניסה, יציאה, שעות, מיירס, שכר ----------
+        // ---------- 6 עמודות (RTL): תאריך, כניסה, יציאה, שעות, מיירס/תפקיד, שכר ----------
         val weights = floatArrayOf(1.1f, 1.0f, 1.0f, 1.0f, 0.8f, 1.2f)
         val contentW = W - 2 * M
         val right = W - M
@@ -131,7 +138,7 @@ object PdfExport {
             ctx.getString(R.string.col_start),
             ctx.getString(R.string.col_end),
             ctx.getString(R.string.col_hours),
-            "מיירס",
+            "מיירס/תפקיד", // 🆕 שונה כדי שיהיה ברור
             ctx.getString(R.string.pdf_pay_header)
         )
 
@@ -147,7 +154,6 @@ object PdfExport {
         var canvas = page.canvas
         var y: Float
 
-        // ציור כותרת ראשית (בעמוד הראשון)
         canvas.drawText(fullTitle, right, M + 20, titlePaint)
         y = M + 40
 
@@ -157,7 +163,7 @@ object PdfExport {
                 pageNo++
                 page = doc.startPage(PdfDocument.PageInfo.Builder(W, H, pageNo).create())
                 canvas = page.canvas
-                y = M // מתחילים מהקצה העליון בעמוד חדש
+                y = M
                 return true
             }
             return false
@@ -176,38 +182,45 @@ object PdfExport {
             val segs = r.segments
             val totalRowHeight = if (segs.size <= 1) rowH else rowH + (segs.size * subRowH)
             
-            // בדיקת שבירת עמוד לפני ציור היום
             if (checkPageBreak(totalRowHeight + 5f)) {
-                drawTableHeader() // ציור כותרת מחדש בעמוד החדש
+                drawTableHeader()
             }
 
             if (segs.size <= 1) {
-                val mires = segs.firstOrNull()?.mirros?.toString() ?: ""
+                val miresDisplay = if (r.role.isNotBlank()) r.role else segs.firstOrNull()?.mirros?.toString() ?: ""
                 val cells = arrayOf(
                     "${r.date.dayOfMonth}/${r.date.monthValue}",
                     Calc.fmtTime(r.startMin),
                     Calc.fmtTime(r.endMin),
                     Calc.fmtHours(r.minutes),
-                    mires,
+                    miresDisplay,
                     Calc.fmtPay(r.pay)
                 )
-                for (i in 0..5) canvas.drawText(cells[i], centers[i], y + 14f, bold)
+                // ציור התאים (התפקיד יקבל צבע שונה)
+                for (i in 0..5) {
+                    val paint = if (i == 4 && r.role.isNotBlank()) rolePaint else bold
+                    canvas.drawText(cells[i], centers[i], y + 14f, paint)
+                }
                 y += rowH
                 canvas.drawLine(M, y, right, y, linePaint)
             } else {
-                // שורה ראשית (סה"כ יום)
+                // שורה ראשית (סה"כ יום) - אם יש תפקיד, הוא יוצג כאן
+                val mainMiresDisplay = if (r.role.isNotBlank()) r.role else ""
                 val cells = arrayOf(
                     "${r.date.dayOfMonth}/${r.date.monthValue}",
                     Calc.fmtTime(r.startMin),
                     Calc.fmtTime(r.endMin),
                     Calc.fmtHours(r.minutes),
-                    "",
+                    mainMiresDisplay,
                     Calc.fmtPay(r.pay)
                 )
-                for (i in 0..5) canvas.drawText(cells[i], centers[i], y + 14f, bold)
+                for (i in 0..5) {
+                    val paint = if (i == 4 && r.role.isNotBlank()) rolePaint else bold
+                    canvas.drawText(cells[i], centers[i], y + 14f, paint)
+                }
                 y += rowH
                 
-                // תתי-שורות לפרקים
+                // תתי-שורות לפרקים (מציגים את המיירס הרגיל)
                 segs.sortedBy { it.startMin }.forEach { s ->
                     val subCells = arrayOf(
                         "",
@@ -242,15 +255,13 @@ object PdfExport {
         }
 
         if (isYearly) {
-            // קיבוץ לפי חודשים
             val byMonth = rows.groupBy { it.date.monthValue }
             
             for (m in 1..12) {
                 val monthRows = byMonth[m]?.sortedBy { it.date } ?: emptyList()
-                if (monthRows.isEmpty()) continue // מדלגים על חודשים ריקים
+                if (monthRows.isEmpty()) continue
 
                 checkPageBreak(monthHeaderH + headerH + 20f)
-                // כותרת חודש
                 canvas.drawText(Calc.hebrewMonth(m), right, y + 20f, monthTitlePaint)
                 y += monthHeaderH
 
@@ -259,7 +270,6 @@ object PdfExport {
                 drawMonthTotal(monthRows)
             }
             
-            // סיכום שנתי כולל בסוף
             checkPageBreak(headerH + 20f)
             val yearMin = rows.sumOf { it.minutes }
             val yearPay = rows.sumOf { it.pay }
@@ -269,11 +279,9 @@ object PdfExport {
             y += headerH + 10f
 
         } else {
-            // ייצוא חודשי רגיל
             drawTableHeader()
             rows.forEach { r -> drawDayRow(r) }
             
-            // סיכום חודשי
             checkPageBreak(headerH + 10f)
             val totalMin = rows.sumOf { it.minutes }
             val totalPay = rows.sumOf { it.pay }
@@ -284,7 +292,6 @@ object PdfExport {
 
         doc.finishPage(page)
 
-        // ---------- שמירה ----------
         val dir = File(ctx.cacheDir, "pdf")
         dir.mkdirs()
         dir.listFiles()?.forEach { it.delete() }
