@@ -14,6 +14,8 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
 import androidx.room.Update
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
@@ -35,7 +37,8 @@ data class DayEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val date: String,
     val rate: Double,
-    @ColumnInfo(defaultValue = "1") val jobId: Long = 1
+    @ColumnInfo(defaultValue = "1") val jobId: Long = 1,
+    @ColumnInfo(defaultValue = "") val role: String = "" // 🆕 שדה תפקיד/חריגה
 )
 
 @Entity(
@@ -173,7 +176,7 @@ abstract class AppDao {
 
 @Database(
     entities = [JobEntity::class, DayEntity::class, SegmentEntity::class, PaymentEntity::class],
-    version = 1,
+    version = 2, // 🆕 עדכנו ל-2
     exportSchema = false
 )
 abstract class AppDb : RoomDatabase() {
@@ -183,6 +186,13 @@ abstract class AppDb : RoomDatabase() {
         @Volatile
         private var inst: AppDb? = null
 
+        // 🆕 Migration: הוספת עמודת role מבלי למחוק נתונים קיימים
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE days ADD COLUMN role TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         fun get(ctx: Context): AppDb =
             inst ?: synchronized(this) {
                 inst ?: Room.databaseBuilder(
@@ -190,8 +200,9 @@ abstract class AppDb : RoomDatabase() {
                     AppDb::class.java,
                     "workpay.db"
                 )
-                    .build()
-                    .also { inst = it }
+                .addMigrations(MIGRATION_1_2) // 🆕 הוספת ה-Migration
+                .build()
+                .also { inst = it }
             }
     }
 }
@@ -208,6 +219,7 @@ data class DayRow(
     val minutes: Int,
     val pay: Double,
     val rate: Double,
+    val role: String = "", // 🆕 הוספת שדה תפקיד
     val segments: List<SegmentEntity> = emptyList()
 )
 
@@ -237,12 +249,12 @@ fun loadMonth(ctx: Context, jobId: Long, m: YearMonth): List<DayRow> {
             minutes = s.sumOf { Calc.minutes(it) },
             pay = s.sumOf { Calc.pay(it, d.rate) },
             rate = d.rate,
+            role = d.role, // 🆕
             segments = s
         )
     }
 }
 
-// 🆕 טעינת כל השנה עבור ייצוא PDF
 fun loadYearDays(ctx: Context, jobId: Long, year: Int): List<DayRow> {
     val dao = AppDb.get(ctx).dao()
     val from = LocalDate.of(year, 1, 1).toString()
@@ -260,6 +272,7 @@ fun loadYearDays(ctx: Context, jobId: Long, year: Int): List<DayRow> {
             minutes = s.sumOf { Calc.minutes(it) },
             pay = s.sumOf { Calc.pay(it, d.rate) },
             rate = d.rate,
+            role = d.role, // 🆕
             segments = s
         )
     }
