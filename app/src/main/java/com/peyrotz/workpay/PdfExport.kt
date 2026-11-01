@@ -14,9 +14,8 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * ייצוא דוח חודשי ל-PDF — ללא ספריות חיצוניות.
- * משתמש ב-PdfDocument המובנה של אנדרואיד.
- * כולל פירוט פרקים עם מיירס לכל פרק.
+ * ייצוא דוחות ל-PDF — ללא ספריות חיצוניות.
+ * תומך בייצוא חודשי וייצוא שנתי.
  */
 object PdfExport {
 
@@ -25,14 +24,8 @@ object PdfExport {
     private const val M = 40f
 
     /**
-     * שורה בטבלה. if bold=true — שורה ראשית של יום.
+     * ייצוא דוח חודשי.
      */
-    private class Row(
-        val cells: Array<String>,
-        val isMain: Boolean,
-        val isTotal: Boolean = false
-    )
-
     fun create(
         ctx: Context,
         jobName: String,
@@ -40,30 +33,62 @@ object PdfExport {
         rows: List<DayRow>
     ): File {
         val he = Locale.forLanguageTag("he")
-        val monthTitle = month.format(DateTimeFormatter.ofPattern("LLLL yyyy", he))
+        val title = month.format(DateTimeFormatter.ofPattern("LLLL yyyy", he))
+        return generatePdf(ctx, jobName, "$jobName - $title", rows, isYearly = false)
+    }
+
+    /**
+     * ייצוא דוח שנתי (כל 12 החודשים).
+     */
+    fun createYearly(
+        ctx: Context,
+        jobName: String,
+        year: Int,
+        rows: List<DayRow>
+    ): File {
+        return generatePdf(ctx, jobName, "$jobName - שנה $year", rows, isYearly = true)
+    }
+
+    // ============================================================
+    // לוגיקת יצירת ה-PDF המרכזית
+    // ============================================================
+    private fun generatePdf(
+        ctx: Context,
+        jobName: String,
+        fullTitle: String,
+        rows: List<DayRow>,
+        isYearly: Boolean
+    ): File {
+        val he = Locale.forLanguageTag("he")
 
         // ---------- Paints ----------
         val normal = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            textSize = 12f
+            textSize = 11f
             color = Color.BLACK
             textAlign = Paint.Align.CENTER
         }
         val bold = Paint(normal).apply {
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            textSize = 12f
         }
         val subPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            textSize = 10f
+            textSize = 9f
             color = Color.parseColor("#7A7A7A")
             textAlign = Paint.Align.CENTER
         }
         val titlePaint = Paint(bold).apply {
-            textSize = 22f
+            textSize = 20f
             textAlign = Paint.Align.RIGHT
             color = Color.parseColor("#2644FF")
         }
         val subTitlePaint = Paint(normal).apply {
-            textSize = 15f
+            textSize = 13f
             color = Color.DKGRAY
+            textAlign = Paint.Align.RIGHT
+        }
+        val monthTitlePaint = Paint(bold).apply {
+            textSize = 14f
+            color = Color.parseColor("#2644FF")
             textAlign = Paint.Align.RIGHT
         }
         val linePaint = Paint().apply {
@@ -75,7 +100,7 @@ object PdfExport {
             style = Paint.Style.FILL
         }
         val headerTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            textSize = 11f
+            textSize = 10f
             color = Color.WHITE
             textAlign = Paint.Align.CENTER
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
@@ -85,7 +110,7 @@ object PdfExport {
             style = Paint.Style.FILL
         }
         val totalTextPaint = Paint(bold).apply {
-            textSize = 14f
+            textSize = 12f
             color = Color.parseColor("#2644FF")
             textAlign = Paint.Align.CENTER
         }
@@ -110,171 +135,176 @@ object PdfExport {
             ctx.getString(R.string.pdf_pay_header)
         )
 
-        // ---------- בניית שורות ----------
-        val items = ArrayList<Row>()
+        // ---------- בניית ה-PDF ----------
+        val rowH = 20f
+        val subRowH = 16f
+        val headerH = 24f
+        val monthHeaderH = 30f
+        
+        val doc = PdfDocument()
+        var pageNo = 1
+        var page = doc.startPage(PdfDocument.PageInfo.Builder(W, H, pageNo).create())
+        var canvas = page.canvas
+        var y: Float
 
-        rows.forEach { r ->
-            val segs = r.segments
-            if (segs.size <= 1) {
-                // יום עם פרק אחד (או אפס) — שורה אחת עם מיירס
-                val mires = segs.firstOrNull()?.mirros?.toString() ?: ""
-                items.add(
-                    Row(
-                        arrayOf(
-                            "${r.date.dayOfMonth}/${r.date.monthValue}",
-                            Calc.fmtTime(r.startMin),
-                            Calc.fmtTime(r.endMin),
-                            Calc.fmtHours(r.minutes),
-                            mires,
-                            Calc.fmtPay(r.pay)
-                        ),
-                        isMain = true
-                    )
-                )
-            } else {
-                // יום עם 2+ פרקים — שורה ראשית (בלי מיירס) + תת-שורות
-                items.add(
-                    Row(
-                        arrayOf(
-                            "${r.date.dayOfMonth}/${r.date.monthValue}",
-                            Calc.fmtTime(r.startMin),
-                            Calc.fmtTime(r.endMin),
-                            Calc.fmtHours(r.minutes),
-                            "",
-                            Calc.fmtPay(r.pay)
-                        ),
-                        isMain = true
-                    )
-                )
-                segs.sortedBy { it.startMin }.forEach { s ->
-                    items.add(
-                        Row(
-                            arrayOf(
-                                "",
-                                Calc.fmtTime(s.startMin),
-                                Calc.fmtTime(s.endMin),
-                                Calc.fmtHours(Calc.minutes(s)),
-                                s.mirros.toString(),
-                                Calc.fmtPay(Calc.pay(s, r.rate))
-                            ),
-                            isMain = false
-                        )
-                    )
-                }
+        // ציור כותרת ראשית (בעמוד הראשון)
+        canvas.drawText(fullTitle, right, M + 20, titlePaint)
+        y = M + 40
+
+        fun checkPageBreak(neededHeight: Float): Boolean {
+            if (y + neededHeight > H - M) {
+                doc.finishPage(page)
+                pageNo++
+                page = doc.startPage(PdfDocument.PageInfo.Builder(W, H, pageNo).create())
+                canvas = page.canvas
+                y = M // מתחילים מהקצה העליון בעמוד חדש
+                return true
             }
+            return false
         }
 
-        // שורת סה"כ
-        items.add(
-            Row(
-                arrayOf(
-                    ctx.getString(R.string.pdf_total),
-                    "",
-                    "",
-                    Calc.fmtHours(rows.sumOf { it.minutes }),
-                    "",
-                    Calc.fmtPay(rows.sumOf { it.pay })
-                ),
-                isMain = true,
-                isTotal = true
-            )
-        )
-
-        // ---------- יצירת PDF ----------
-        val rowH = 22f
-        val subRowH = 18f
-        val headerH = 26f
-        val doc = PdfDocument()
-        var idx = 0
-        var pageNo = 1
-
-        while (true) {
-            val page = doc.startPage(
-                PdfDocument.PageInfo.Builder(W, H, pageNo).create()
-            )
-            val c = page.canvas
-            var y: Float
-
-            if (pageNo == 1) {
-                c.drawText(jobName, right, M + 22, titlePaint)
-                c.drawText(monthTitle, right, M + 46, subTitlePaint)
-                y = M + 70
-            } else {
-                y = M
-            }
-
-            // Header
-            c.drawRect(M, y, right, y + headerH, headerBgPaint)
+        fun drawTableHeader() {
+            checkPageBreak(headerH + 10f)
+            canvas.drawRect(M, y, right, y + headerH, headerBgPaint)
             for (i in 0..5) {
-                c.drawText(labels[i], centers[i], y + 18f, headerTextPaint)
+                canvas.drawText(labels[i], centers[i], y + 16f, headerTextPaint)
             }
             y += headerH
+        }
 
-            // Rows
-            while (idx < items.size) {
-                val row = items[idx]
-                val h = if (row.isMain) rowH else subRowH
-
-                // page break?
-                if (y + h > H - M) break
-
-                val paint = when {
-                    row.isTotal -> bold
-                    row.isMain -> normal
-                    else -> subPaint
-                }
-
-                // רקע תכלת לשורת סה"כ
-                if (row.isTotal) {
-                    c.drawRect(M, y, right, y + h, totalBgPaint)
-                }
-
-                val textY = y + h / 2f + 4f
-                for (i in 0..5) {
-                    if (i == 5 && row.isTotal) {
-                        c.drawText(row.cells[i], centers[i], textY, totalTextPaint)
-                    } else {
-                        c.drawText(row.cells[i], centers[i], textY, paint)
-                    }
-                }
-
-                y += h
-                c.drawLine(M, y, right, y, linePaint)
-                idx++
+        fun drawDayRow(r: DayRow) {
+            val segs = r.segments
+            val totalRowHeight = if (segs.size <= 1) rowH else rowH + (segs.size * subRowH)
+            
+            // בדיקת שבירת עמוד לפני ציור היום
+            if (checkPageBreak(totalRowHeight + 5f)) {
+                drawTableHeader() // ציור כותרת מחדש בעמוד החדש
             }
 
-            doc.finishPage(page)
-            if (idx >= items.size) break
-            pageNo++
+            if (segs.size <= 1) {
+                val mires = segs.firstOrNull()?.mirros?.toString() ?: ""
+                val cells = arrayOf(
+                    "${r.date.dayOfMonth}/${r.date.monthValue}",
+                    Calc.fmtTime(r.startMin),
+                    Calc.fmtTime(r.endMin),
+                    Calc.fmtHours(r.minutes),
+                    mires,
+                    Calc.fmtPay(r.pay)
+                )
+                for (i in 0..5) canvas.drawText(cells[i], centers[i], y + 14f, bold)
+                y += rowH
+                canvas.drawLine(M, y, right, y, linePaint)
+            } else {
+                // שורה ראשית (סה"כ יום)
+                val cells = arrayOf(
+                    "${r.date.dayOfMonth}/${r.date.monthValue}",
+                    Calc.fmtTime(r.startMin),
+                    Calc.fmtTime(r.endMin),
+                    Calc.fmtHours(r.minutes),
+                    "",
+                    Calc.fmtPay(r.pay)
+                )
+                for (i in 0..5) canvas.drawText(cells[i], centers[i], y + 14f, bold)
+                y += rowH
+                
+                // תתי-שורות לפרקים
+                segs.sortedBy { it.startMin }.forEach { s ->
+                    val subCells = arrayOf(
+                        "",
+                        Calc.fmtTime(s.startMin),
+                        Calc.fmtTime(s.endMin),
+                        Calc.fmtHours(Calc.minutes(s)),
+                        s.mirros.toString(),
+                        Calc.fmtPay(Calc.pay(s, r.rate))
+                    )
+                    for (i in 0..5) canvas.drawText(subCells[i], centers[i], y + 11f, subPaint)
+                    y += subRowH
+                }
+                canvas.drawLine(M, y, right, y, linePaint)
+            }
         }
+
+        fun drawMonthTotal(rows: List<DayRow>) {
+            checkPageBreak(headerH + 10f)
+            canvas.drawRect(M, y, right, y + headerH, totalBgPaint)
+            val totalMin = rows.sumOf { it.minutes }
+            val totalPay = rows.sumOf { it.pay }
+            val cells = arrayOf(
+                "סה\"כ חודש",
+                "",
+                "",
+                Calc.fmtHours(totalMin),
+                "",
+                Calc.fmtPay(totalPay)
+            )
+            for (i in 0..5) canvas.drawText(cells[i], centers[i], y + 16f, totalTextPaint)
+            y += headerH + 10f
+        }
+
+        if (isYearly) {
+            // קיבוץ לפי חודשים
+            val byMonth = rows.groupBy { it.date.monthValue }
+            
+            for (m in 1..12) {
+                val monthRows = byMonth[m]?.sortedBy { it.date } ?: emptyList()
+                if (monthRows.isEmpty()) continue // מדלגים על חודשים ריקים
+
+                checkPageBreak(monthHeaderH + headerH + 20f)
+                // כותרת חודש
+                canvas.drawText(Calc.hebrewMonth(m), right, y + 20f, monthTitlePaint)
+                y += monthHeaderH
+
+                drawTableHeader()
+                monthRows.forEach { r -> drawDayRow(r) }
+                drawMonthTotal(monthRows)
+            }
+            
+            // סיכום שנתי כולל בסוף
+            checkPageBreak(headerH + 20f)
+            val yearMin = rows.sumOf { it.minutes }
+            val yearPay = rows.sumOf { it.pay }
+            canvas.drawRect(M, y, right, y + headerH + 10f, totalBgPaint)
+            val cells = arrayOf("סה\"כ שנתי", "", "", Calc.fmtHours(yearMin), "", Calc.fmtPay(yearPay))
+            for (i in 0..5) canvas.drawText(cells[i], centers[i], y + 22f, totalTextPaint)
+            y += headerH + 10f
+
+        } else {
+            // ייצוא חודשי רגיל
+            drawTableHeader()
+            rows.forEach { r -> drawDayRow(r) }
+            
+            // סיכום חודשי
+            checkPageBreak(headerH + 10f)
+            val totalMin = rows.sumOf { it.minutes }
+            val totalPay = rows.sumOf { it.pay }
+            canvas.drawRect(M, y, right, y + headerH, totalBgPaint)
+            val cells = arrayOf(ctx.getString(R.string.pdf_total), "", "", Calc.fmtHours(totalMin), "", Calc.fmtPay(totalPay))
+            for (i in 0..5) canvas.drawText(cells[i], centers[i], y + 16f, totalTextPaint)
+        }
+
+        doc.finishPage(page)
 
         // ---------- שמירה ----------
         val dir = File(ctx.cacheDir, "pdf")
         dir.mkdirs()
         dir.listFiles()?.forEach { it.delete() }
 
-        val safeJob = jobName
-            .replace(Regex("[\\\\/:*?\"<>|]"), "_")
-            .ifBlank { "job" }
-        val file = File(dir, "${safeJob}_$month.pdf")
+        val safeJob = jobName.replace(Regex("[\\\\/:*?\"<>|]"), "_").ifBlank { "job" }
+        val fileName = if (isYearly) "${safeJob}_${rows.firstOrNull()?.date?.year ?: "Year"}.pdf" else "${safeJob}_${rows.firstOrNull()?.date?.let { YearMonth.from(it) } ?: "Month"}.pdf"
+        
+        val file = File(dir, fileName)
         FileOutputStream(file).use { doc.writeTo(it) }
         doc.close()
         return file
     }
 
     fun share(ctx: Context, file: File) {
-        val uri = FileProvider.getUriForFile(
-            ctx,
-            ctx.packageName + ".fileprovider",
-            file
-        )
+        val uri = FileProvider.getUriForFile(ctx, ctx.packageName + ".fileprovider", file)
         val send = Intent(Intent.ACTION_SEND).apply {
             type = "application/pdf"
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        ctx.startActivity(
-            Intent.createChooser(send, ctx.getString(R.string.share_title))
-        )
+        ctx.startActivity(Intent.createChooser(send, ctx.getString(R.string.share_title)))
     }
 }
