@@ -89,8 +89,11 @@ dependencies {
     // Gson (לגיבוי JSON)
     implementation("com.google.code.gson:gson:2.10.1")
 
-    // 🆕 DocumentFile (לגישה לתיקיות - AutoBackup)
+    // DocumentFile (לגישה לתיקיות - AutoBackup)
     implementation("androidx.documentfile:documentfile:1.0.1")
+
+    // 🆕 Biometric (לנעילה בטביעת אצבע)
+    implementation("androidx.biometric:biometric:1.1.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
