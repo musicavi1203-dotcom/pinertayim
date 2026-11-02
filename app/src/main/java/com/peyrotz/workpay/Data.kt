@@ -38,7 +38,7 @@ data class DayEntity(
     val date: String,
     val rate: Double,
     @ColumnInfo(defaultValue = "1") val jobId: Long = 1,
-    @ColumnInfo(defaultValue = "") val role: String = "" // 🆕 שדה תפקיד/חריגה
+    @ColumnInfo(defaultValue = "") val role: String = ""
 )
 
 @Entity(
@@ -176,7 +176,7 @@ abstract class AppDao {
 
 @Database(
     entities = [JobEntity::class, DayEntity::class, SegmentEntity::class, PaymentEntity::class],
-    version = 2, // 🆕 עדכנו ל-2
+    version = 2,
     exportSchema = false
 )
 abstract class AppDb : RoomDatabase() {
@@ -186,7 +186,6 @@ abstract class AppDb : RoomDatabase() {
         @Volatile
         private var inst: AppDb? = null
 
-        // 🆕 Migration: הוספת עמודת role מבלי למחוק נתונים קיימים
         private val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE days ADD COLUMN role TEXT NOT NULL DEFAULT ''")
@@ -200,7 +199,7 @@ abstract class AppDb : RoomDatabase() {
                     AppDb::class.java,
                     "workpay.db"
                 )
-                .addMigrations(MIGRATION_1_2) // 🆕 הוספת ה-Migration
+                .addMigrations(MIGRATION_1_2)
                 .build()
                 .also { inst = it }
             }
@@ -219,7 +218,7 @@ data class DayRow(
     val minutes: Int,
     val pay: Double,
     val rate: Double,
-    val role: String = "", // 🆕 הוספת שדה תפקיד
+    val role: String = "",
     val segments: List<SegmentEntity> = emptyList()
 )
 
@@ -249,7 +248,7 @@ fun loadMonth(ctx: Context, jobId: Long, m: YearMonth): List<DayRow> {
             minutes = s.sumOf { Calc.minutes(it) },
             pay = s.sumOf { Calc.pay(it, d.rate) },
             rate = d.rate,
-            role = d.role, // 🆕
+            role = d.role,
             segments = s
         )
     }
@@ -272,7 +271,7 @@ fun loadYearDays(ctx: Context, jobId: Long, year: Int): List<DayRow> {
             minutes = s.sumOf { Calc.minutes(it) },
             pay = s.sumOf { Calc.pay(it, d.rate) },
             rate = d.rate,
-            role = d.role, // 🆕
+            role = d.role,
             segments = s
         )
     }
@@ -379,6 +378,7 @@ object Prefs {
     private const val KEY_REMINDER_MIN = "reminder_min"
     private const val KEY_AUTO_BACKUP_FOLDER = "auto_backup_folder"
     private const val KEY_LAST_AUTO_BACKUP = "last_auto_backup"
+    private const val KEY_BIOMETRIC_LOCK = "biometric_lock" // 🆕
 
     private fun p(ctx: Context) = ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
@@ -420,5 +420,11 @@ object Prefs {
     fun lastAutoBackup(ctx: Context): Long = p(ctx).getLong(KEY_LAST_AUTO_BACKUP, 0L)
     fun setLastAutoBackup(ctx: Context, millis: Long) {
         p(ctx).edit().putLong(KEY_LAST_AUTO_BACKUP, millis).apply()
+    }
+
+    // 🆕 נעילה ביומטרית
+    fun biometricLock(ctx: Context): Boolean = p(ctx).getBoolean(KEY_BIOMETRIC_LOCK, false)
+    fun setBiometricLock(ctx: Context, on: Boolean) {
+        p(ctx).edit().putBoolean(KEY_BIOMETRIC_LOCK, on).apply()
     }
 }
