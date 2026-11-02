@@ -50,6 +50,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
@@ -106,8 +107,8 @@ fun DayScreen(
         )
     }
     var rateText by remember { mutableStateOf(Calc.fmtRateInput(defaultRate)) }
-    var role by remember { mutableStateOf("") } // 🆕 שדה תפקיד
-    var isException by remember { mutableStateOf(false) } // 🆕 האם זה יום חריג
+    var role by remember { mutableStateOf("") }
+    var isException by remember { mutableStateOf(false) }
 
     val segs = remember { mutableStateListOf<SegUi>() }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -135,7 +136,7 @@ fun DayScreen(
                 date = LocalDate.parse(d.date)
                 rateText = Calc.fmtRateInput(d.rate)
                 role = d.role
-                isException = d.role.isNotEmpty() // אם יש תפקיד, זה יום חריג
+                isException = d.role.isNotEmpty()
                 segs.clear()
                 loaded.second.forEach {
                     segs.add(
@@ -152,10 +153,11 @@ fun DayScreen(
 
     val rate = rateText.replace(',', '.').toDoubleOrNull()
     val totalMin = segs.sumOf { Calc.minutesOf(it.start, it.end) }
+    
+    // 🆕 חישוב שכר מותאם לחריגה
     val totalPay = segs.sumOf {
-        Calc.minutesOf(it.start, it.end) / 60.0 *
-            (it.mirros.toIntOrNull() ?: 0) *
-            (rate ?: 0.0)
+        val mirrosValue = if (isException) 1 else (it.mirros.toIntOrNull() ?: 0)
+        Calc.minutesOf(it.start, it.end) / 60.0 * mirrosValue * (rate ?: 0.0)
     }
 
     fun toast(id: Int) = Toast.makeText(ctx, ctx.getString(id), Toast.LENGTH_SHORT).show()
@@ -170,7 +172,8 @@ fun DayScreen(
         if (segs.any { it.start == it.end }) {
             toast(R.string.err_time); return
         }
-        if (segs.any { (it.mirros.toIntOrNull() ?: 0) < 1 }) {
+        // 🆕 לא בודקים מיירס אם זה יום חריג
+        if (!isException && segs.any { (it.mirros.toIntOrNull() ?: 0) < 1 }) {
             toast(R.string.err_mirros); return
         }
         if (isException && role.isBlank()) {
@@ -192,7 +195,8 @@ fun DayScreen(
                 dayId = 0,
                 startMin = it.start,
                 endMin = it.end,
-                mirros = it.mirros.toInt()
+                // 🆕 שומרים 1 במיירס אם זה חריגה (כדי לא לשבור חישובים)
+                mirros = if (isException) 1 else it.mirros.toInt()
             )
         }
         scope.launch {
@@ -239,7 +243,6 @@ fun DayScreen(
             
             Spacer(Modifier.weight(1f))
             
-            // 🆕 כפתור "חריגה" בצד שמאל
             TextButton(onClick = { isException = !isException }) {
                 Icon(
                     Icons.Default.Star,
@@ -285,7 +288,7 @@ fun DayScreen(
                 )
             }
 
-            // 🆕 שדה תפקיד (אם זה יום חריג)
+            // שדה תפקיד
             if (isException) {
                 Spacer(Modifier.padding(top = 12.dp))
                 OutlinedTextField(
@@ -318,8 +321,10 @@ fun DayScreen(
 
             // ======= רשימת פרקים =======
             segs.forEach { s ->
-                val segPay = Calc.minutesOf(s.start, s.end) / 60.0 *
-                    (s.mirros.toIntOrNull() ?: 0) * (rate ?: 0.0)
+                // 🆕 חישוב מותאם לתצוגה
+                val mirrosValue = if (isException) 1 else (s.mirros.toIntOrNull() ?: 0)
+                val segPay = Calc.minutesOf(s.start, s.end) / 60.0 * mirrosValue * (rate ?: 0.0)
+                
                 Card(
                     Modifier
                         .fillMaxWidth()
@@ -338,10 +343,7 @@ fun DayScreen(
                                 },
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Text(
-                                    stringResource(R.string.start) + " " +
-                                        Calc.fmtTime(s.start)
-                                )
+                                Text(stringResource(R.string.start) + " " + Calc.fmtTime(s.start))
                             }
                             Spacer(Modifier.width(8.dp))
                             OutlinedButton(
@@ -353,10 +355,7 @@ fun DayScreen(
                                 },
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Text(
-                                    stringResource(R.string.end) + " " +
-                                        Calc.fmtTime(s.end)
-                                )
+                                Text(stringResource(R.string.end) + " " + Calc.fmtTime(s.end))
                             }
                             IconButton(onClick = { segs.removeByUid(s.uid) }) {
                                 Icon(
@@ -367,28 +366,32 @@ fun DayScreen(
                             }
                         }
                         Spacer(Modifier.padding(top = 8.dp))
+                        
+                        // 🆕 אזור מיירס ושכר
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            OutlinedTextField(
-                                value = s.mirros,
-                                onValueChange = { v ->
-                                    if (v.all { c -> c.isDigit() } && v.length <= 3) {
-                                        val i = segs.indexOfFirst { it.uid == s.uid }
-                                        if (i >= 0) segs[i] = segs[i].copy(mirros = v)
-                                    }
-                                },
-                                label = { Text(stringResource(R.string.mirros_per_hour)) },
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(
-                                    keyboardType = KeyboardType.Number
-                                ),
-                                modifier = Modifier.weight(1f)
-                            )
-                            Spacer(Modifier.width(12.dp))
+                            if (!isException) {
+                                OutlinedTextField(
+                                    value = s.mirros,
+                                    onValueChange = { v ->
+                                        if (v.all { c -> c.isDigit() } && v.length <= 3) {
+                                            val i = segs.indexOfFirst { it.uid == s.uid }
+                                            if (i >= 0) segs[i] = segs[i].copy(mirros = v)
+                                        }
+                                    },
+                                    label = { Text(stringResource(R.string.mirros_per_hour)) },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Spacer(Modifier.width(12.dp))
+                            }
+                            
                             Text(
-                                stringResource(R.string.segment_pay) + ": ₪" +
-                                    Calc.fmtPay(segPay),
+                                stringResource(R.string.segment_pay) + ": ₪" + Calc.fmtPay(segPay),
                                 fontWeight = FontWeight.Bold,
-                                color = primary
+                                color = primary,
+                                modifier = Modifier.weight(1f),
+                                textAlign = TextAlign.End // מיושר לימין כשהמיירס מוסתר
                             )
                         }
                     }
