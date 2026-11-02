@@ -91,13 +91,16 @@ fun App() {
     var colorIdx by remember { mutableStateOf(Prefs.colorIndex(ctx)) }
     var screen by remember { mutableStateOf<Screen>(Screen.Home) }
     
-    // חודש ברירת מחדל - היום
     var month by remember { mutableStateOf(YearMonth.now()) }
     
     var jobs by remember { mutableStateOf<List<JobEntity>>(emptyList()) }
     var jobsLoaded by remember { mutableStateOf(false) }
     var jobId by remember { mutableStateOf(Prefs.selectedJob(ctx)) }
     val primary = Color(Palette[colorIdx.coerceIn(0, Palette.lastIndex)])
+
+    // 🆕 מצב נעילה
+    val lockSupported = remember { BiometricHelper.canUse(ctx) }
+    var isLocked by remember { mutableStateOf(Prefs.biometricLock(ctx) && lockSupported) }
 
     fun reloadJobs(select: Long? = null) {
         scope.launch {
@@ -139,101 +142,104 @@ fun App() {
     BackHandler(enabled = screen !is Screen.Home) { screen = Screen.Home }
 
     AppTheme(primary) {
-        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-            if (!jobsLoaded || jobs.isEmpty()) {
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.background)
-                )
-            } else {
-                val job = jobs.firstOrNull { it.id == jobId } ?: jobs.first()
-                when (val s = screen) {
-                    is Screen.Home -> HomeScreen(
-                        jobs = jobs,
-                        jobId = job.id,
-                        month = month,
-                        onMonth = { 
-                            // 🆕 עדכון החודש מה-Pager
-                            month = it 
-                        },
-                        onSelectJob = {
-                            jobId = it
-                            Prefs.setSelectedJob(ctx, it)
-                            // כשמחליפים עבודה - חוזרים להיום
-                            month = YearMonth.now()
-                        },
-                        onAddJob = { addJob(it, true) },
-                        onAdd = {
-                            val d = if (month == YearMonth.now()) LocalDate.now()
-                            else month.atDay(1)
-                            screen = Screen.Day(0L, d.toString())
-                        },
-                        onOpen = { screen = Screen.Day(it, LocalDate.now().toString()) },
-                        onSettings = { screen = Screen.Settings },
-                        onPayments = { screen = Screen.Payments },
-                        onYearly = { screen = Screen.Yearly },
-                        onGraph = { screen = Screen.Graph }
+        // 🆕 מסך נעילה אם מופעל ותומך
+        if (isLocked) {
+            LockScreen(primary = primary) {
+                isLocked = false
+            }
+        } else {
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                if (!jobsLoaded || jobs.isEmpty()) {
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.background)
                     )
+                } else {
+                    val job = jobs.firstOrNull { it.id == jobId } ?: jobs.first()
+                    when (val s = screen) {
+                        is Screen.Home -> HomeScreen(
+                            jobs = jobs,
+                            jobId = job.id,
+                            month = month,
+                            onMonth = { month = it },
+                            onSelectJob = {
+                                jobId = it
+                                Prefs.setSelectedJob(ctx, it)
+                                month = YearMonth.now()
+                            },
+                            onAddJob = { addJob(it, true) },
+                            onAdd = {
+                                val d = if (month == YearMonth.now()) LocalDate.now()
+                                else month.atDay(1)
+                                screen = Screen.Day(0L, d.toString())
+                            },
+                            onOpen = { screen = Screen.Day(it, LocalDate.now().toString()) },
+                            onSettings = { screen = Screen.Settings },
+                            onPayments = { screen = Screen.Payments },
+                            onYearly = { screen = Screen.Yearly },
+                            onGraph = { screen = Screen.Graph }
+                        )
 
-                    is Screen.Settings -> SettingsScreen(
-                        jobs = jobs,
-                        colorIdx = colorIdx,
-                        onColor = {
-                            colorIdx = it
-                            Prefs.setColorIndex(ctx, it)
-                        },
-                        onSaveJob = { j ->
-                            scope.launch {
-                                withContext(Dispatchers.IO) {
-                                    AppDb.get(ctx).dao().updateJob(j)
+                        is Screen.Settings -> SettingsScreen(
+                            jobs = jobs,
+                            colorIdx = colorIdx,
+                            onColor = {
+                                colorIdx = it
+                                Prefs.setColorIndex(ctx, it)
+                            },
+                            onSaveJob = { j ->
+                                scope.launch {
+                                    withContext(Dispatchers.IO) {
+                                        AppDb.get(ctx).dao().updateJob(j)
+                                    }
+                                    reloadJobs()
                                 }
-                                reloadJobs()
-                            }
-                        },
-                        onDeleteJob = { id ->
-                            scope.launch {
-                                withContext(Dispatchers.IO) {
-                                    AppDb.get(ctx).dao().deleteJob(id)
+                            },
+                            onDeleteJob = { id ->
+                                scope.launch {
+                                    withContext(Dispatchers.IO) {
+                                        AppDb.get(ctx).dao().deleteJob(id)
+                                    }
+                                    reloadJobs()
                                 }
-                                reloadJobs()
+                            },
+                            onAddJob = { addJob(it, false) },
+                            onClose = { screen = Screen.Home },
+                            onRefresh = { reloadJobs() }
+                        )
+
+                        is Screen.Payments -> PaymentsScreen(
+                            jobId = job.id,
+                            jobName = job.name,
+                            onClose = { screen = Screen.Home }
+                        )
+
+                        is Screen.Yearly -> YearlyScreen(
+                            jobId = job.id,
+                            jobName = job.name,
+                            onClose = { screen = Screen.Home },
+                            onOpenMonth = { ym ->
+                                month = ym
+                                screen = Screen.Home
                             }
-                        },
-                        onAddJob = { addJob(it, false) },
-                        onClose = { screen = Screen.Home },
-                        onRefresh = { reloadJobs() } 
-                    )
+                        )
 
-                    is Screen.Payments -> PaymentsScreen(
-                        jobId = job.id,
-                        jobName = job.name,
-                        onClose = { screen = Screen.Home }
-                    )
+                        is Screen.Graph -> GraphScreen(
+                            jobId = job.id,
+                            month = month,
+                            onMonth = { month = it },
+                            onClose = { screen = Screen.Home }
+                        )
 
-                    is Screen.Yearly -> YearlyScreen(
-                        jobId = job.id,
-                        jobName = job.name,
-                        onClose = { screen = Screen.Home },
-                        onOpenMonth = { ym ->
-                            month = ym
-                            screen = Screen.Home
-                        }
-                    )
-
-                    is Screen.Graph -> GraphScreen(
-                        jobId = job.id,
-                        month = month,
-                        onMonth = { month = it },
-                        onClose = { screen = Screen.Home }
-                    )
-
-                    is Screen.Day -> DayScreen(
-                        dayId = s.id,
-                        jobId = job.id,
-                        defaultRate = job.defaultRate,
-                        initialDate = s.date,
-                        onClose = { screen = Screen.Home }
-                    )
+                        is Screen.Day -> DayScreen(
+                            dayId = s.id,
+                            jobId = job.id,
+                            defaultRate = job.defaultRate,
+                            initialDate = s.date,
+                            onClose = { screen = Screen.Home }
+                        )
+                    }
                 }
             }
         }
