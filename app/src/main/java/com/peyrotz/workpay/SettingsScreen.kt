@@ -31,6 +31,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.AlertDialog
@@ -92,13 +93,16 @@ fun SettingsScreen(
     var autoBackupUri by remember { mutableStateOf(Prefs.autoBackupFolder(ctx)) }
     var lastBackupTime by remember { mutableStateOf(Prefs.lastAutoBackup(ctx)) }
 
+    // 🆕 Biometric Lock state
+    val biometricSupported = remember { BiometricHelper.canUse(ctx) }
+    var biometricOn by remember { mutableStateOf(Prefs.biometricLock(ctx)) }
+
     // Folder Picker
     val folderPickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
     ) { uri: Uri? ->
         if (uri != null) {
             try {
-                // שמירת הרשאה קבועה לתיקייה
                 ctx.contentResolver.takePersistableUriPermission(
                     uri,
                     Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
@@ -171,7 +175,7 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
-            // Jobs
+            // ======= Jobs =======
             Text(
                 stringResource(R.string.jobs_label),
                 fontSize = 18.sp,
@@ -205,6 +209,68 @@ fun SettingsScreen(
                 Text(stringResource(R.string.add_job))
             }
 
+            // ======= 🆕 אבטחה ביומטרית =======
+            Text(
+                "אבטחה",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 28.dp, bottom = 8.dp)
+            )
+
+            Card(
+                Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.Fingerprint,
+                            contentDescription = null,
+                            tint = if (biometricSupported) MaterialTheme.colorScheme.primary else Color.Gray,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("נעילה בטביעת אצבע", fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                            Text(
+                                when {
+                                    !biometricSupported -> "המכשיר לא תומך בטביעת אצבע"
+                                    biometricOn -> "האפליקציה נעולה בפתיחה"
+                                    else -> "האפליקציה נפתחת ישירות"
+                                },
+                                fontSize = 13.sp,
+                                color = Color.Gray
+                            )
+                        }
+                        Switch(
+                            checked = biometricOn,
+                            enabled = biometricSupported,
+                            onCheckedChange = { checked ->
+                                if (biometricSupported) {
+                                    biometricOn = checked
+                                    Prefs.setBiometricLock(ctx, checked)
+                                    Toast.makeText(
+                                        ctx,
+                                        if (checked) "הנעילה הופעלה - תיכנס לתוקף בפתיחה הבאה"
+                                        else "הנעילה בוטלה",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                        )
+                    }
+                    if (!biometricSupported) {
+                        Spacer(Modifier.padding(top = 8.dp))
+                        Text(
+                            "המכשיר הזה לא מאפשר להשתמש בטביעת אצבע. האפשרות תופיע אוטומטית במכשיר תואם.",
+                            fontSize = 12.sp,
+                            color = Color.Gray
+                        )
+                    }
+                }
+            }
+
             // ======= גיבוי ושחזור =======
             Text(
                 "גיבוי ושחזור נתונים",
@@ -219,7 +285,7 @@ fun SettingsScreen(
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
                 Column(Modifier.padding(16.dp)) {
-                    // גיבוי אוטומטי (תיקייה)
+                    // גיבוי אוטומטי
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Folder, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.width(12.dp))
@@ -357,7 +423,7 @@ fun SettingsScreen(
         }
     }
 
-    // Dialogs (Edit job, Delete job, Add job) - נשארו זהים לחלוטין
+    // ======= דיאלוג עריכת עבודה =======
     val ej = editing
     if (ej != null) {
         var nameText by remember(ej.id) { mutableStateOf(ej.name) }
